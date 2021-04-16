@@ -14,14 +14,15 @@ use std::boxed::Box;
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
 
-#[cfg(feature = "std")]
 use hashbrown::HashMap;
-#[cfg(feature = "std")]
 use hashbrown::hash_map::Values;
-#[cfg(feature = "std")]
-use std::cmp::Ordering;
+
+use core::cmp::Ordering;
+
 #[cfg(feature = "std")]
 use std::vec::Vec;
+#[cfg(feature = "alloc")]
+use alloc::vec::Vec;
 
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_TABLE;
 use curve25519_dalek::ristretto::CompressedRistretto;

@@ -387,18 +387,14 @@
 //! [`generate_commitment_share_lists`]) and publish a list of commitment shares.
 //!
 //! ```rust
-//! # #[cfg(feature = "std")]
 //! use frost_dalek::compute_message_hash;
-//! # #[cfg(feature = "std")]
 //! use frost_dalek::generate_commitment_share_lists;
 //! # use frost_dalek::DistributedKeyGeneration;
 //! # use frost_dalek::Parameters;
 //! # use frost_dalek::Participant;
-//! # #[cfg(feature = "std")]
 //! use frost_dalek::SignatureAggregator;
 //!
 //! use rand::rngs::OsRng;
-//! # #[cfg(feature = "std")]
 //! # fn do_test() -> Result<(), ()> {
 //! # let params = Parameters { t: 2, n: 3 };
 //! #
@@ -454,30 +450,23 @@
 //!
 //! let mut aggregator = SignatureAggregator::new(params, bob_group_key.clone(), &context[..], &message[..]);
 //! # Ok(()) }
-//! # #[cfg(feature = "std")]
 //! # fn main() { assert!(do_test().is_ok()); }
-//! # #[cfg(not(feature = "std"))]
-//! # fn main() { }
 //! ```
 //!
 //! The aggregator takes note of each expected signer for this run of the protocol.  For this run,
 //! we'll have Alice and Carol sign.
 //!
 //! ```rust
-//! # #[cfg(feature = "std")]
 //! # use frost_dalek::compute_message_hash;
-//! # #[cfg(feature = "std")]
 //! # use frost_dalek::generate_commitment_share_lists;
 //! # use frost_dalek::DistributedKeyGeneration;
 //! # use frost_dalek::IndividualPublicKey;
 //! # use frost_dalek::Parameters;
 //! # use frost_dalek::Participant;
-//! # #[cfg(feature = "std")]
 //! # use frost_dalek::SignatureAggregator;
 //! #
 //! # use rand::rngs::OsRng;
 //! #
-//! # #[cfg(feature = "std")]
 //! # fn do_test() -> Result<(), ()> {
 //! # let params = Parameters { t: 2, n: 3 };
 //! #
@@ -532,10 +521,7 @@
 //! aggregator.include_signer(1, alice_public_comshares.commitments[0], alice_public_key);
 //! aggregator.include_signer(3, carol_public_comshares.commitments[0], carol_public_key);
 //! # Ok(()) }
-//! # #[cfg(feature = "std")]
 //! # fn main() { assert!(do_test().is_ok()); }
-//! # #[cfg(not(feature = "std"))]
-//! # fn main() { }
 //! ```
 //!
 //! The aggregator should then publicly announce which participants are expected to be signers.
@@ -547,19 +533,15 @@
 //! Alice and Carol each then compute their partial signatures, and send these to the signature aggregator.
 //!
 //! ```rust
-//! # #[cfg(feature = "std")]
 //! # use frost_dalek::compute_message_hash;
-//! # #[cfg(feature = "std")]
 //! # use frost_dalek::generate_commitment_share_lists;
 //! # use frost_dalek::DistributedKeyGeneration;
 //! # use frost_dalek::Parameters;
 //! # use frost_dalek::Participant;
-//! # #[cfg(feature = "std")]
 //! # use frost_dalek::SignatureAggregator;
 //! #
 //! # use rand::rngs::OsRng;
 //! #
-//! # #[cfg(feature = "std")]
 //! # fn do_test() -> Result<(), &'static str> {
 //! # let params = Parameters { t: 2, n: 3 };
 //! #
@@ -624,10 +606,7 @@
 //! aggregator.include_partial_signature(alice_partial);
 //! aggregator.include_partial_signature(carol_partial);
 //! # Ok(()) }
-//! # #[cfg(feature = "std")]
 //! # fn main() { assert!(do_test().is_ok()); }
-//! # #[cfg(not(feature = "std"))]
-//! # fn main() { }
 //! ```
 //!
 //! ## Signature Aggregation
@@ -689,10 +668,6 @@ pub mod keygen;
 pub mod parameters;
 pub mod precomputation;
 pub mod nizk;
-
-// The signing protocol uses Hashmap (currently for both the signature aggregator
-// and signers), which requires std.
-#[cfg(feature = "std")]
 pub mod signature;
 
 pub use keygen::DistributedKeyGeneration;
@@ -703,7 +678,5 @@ pub use keygen::SecretKey as IndividualSecretKey;
 pub use parameters::Parameters;
 pub use precomputation::generate_commitment_share_lists;
 
-#[cfg(feature = "std")]
 pub use signature::compute_message_hash;
-#[cfg(feature = "std")]
 pub use signature::SignatureAggregator;

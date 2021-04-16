@@ -9,28 +9,19 @@
 
 //! Integration tests for FROST.
 
-#[cfg(feature = "std")]
 use ed25519_dalek::Verifier;
 
-#[cfg(feature = "std")]
 use rand::rngs::OsRng;
 
-#[cfg(feature = "std")]
 use frost_dalek::compute_message_hash;
-#[cfg(feature = "std")]
 use frost_dalek::generate_commitment_share_lists;
 
-#[cfg(feature = "std")]
 use frost_dalek::DistributedKeyGeneration;
-#[cfg(feature = "std")]
 use frost_dalek::Parameters;
-#[cfg(feature = "std")]
 use frost_dalek::Participant;
 
-#[cfg(feature = "std")]
 use frost_dalek::SignatureAggregator;
 
-#[cfg(feature = "std")]
 #[test]
 fn signing_and_verification_3_out_of_5() {
     let params = Parameters { n: 5, t: 3 };
@@ -144,7 +135,6 @@ fn signing_and_verification_3_out_of_5() {
 }
 
 /// We are currently incompatible with ed25519 verification.
-#[cfg(feature = "std")]
 #[test]
 fn signing_and_verification_with_ed25519_dalek_2_out_of_3() {
     let params = Parameters { n: 3, t: 2 };
