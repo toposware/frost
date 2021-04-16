@@ -788,7 +788,7 @@ mod test {
     use crate::signature::SignatureAggregator;
 
     /// Reconstruct the secret from enough (at least the threshold) already-verified shares.
-    fn reconstruct_secret(participants: &Vec<&DealtParticipant>) -> Result<Scalar, &'static str> {
+    fn reconstruct_secret(participants: &[&DealtParticipant]) -> Result<Scalar, &'static str> {
         let all_participant_indices: Vec<u32> = participants.iter().map(|p| p.public_key.index).collect();
         let mut secret = Scalar::zero();
 

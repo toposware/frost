@@ -979,7 +979,7 @@ mod test {
         let (p1_public_comshares, mut p1_secret_comshares) = generate_commitment_share_lists(&mut OsRng, 1, 1);
         let (p2_public_comshares, mut p2_secret_comshares) = generate_commitment_share_lists(&mut OsRng, 2, 1);
 
-        let mut aggregator = SignatureAggregator::new(params, group_key.clone(), &context[..], &message[..]);
+        let mut aggregator = SignatureAggregator::new(params, group_key, &context[..], &message[..]);
 
         aggregator.include_signer(1, p1_public_comshares.commitments[0], (&p1_sk).into());
         aggregator.include_signer(2, p2_public_comshares.commitments[0], (&p2_sk).into());
