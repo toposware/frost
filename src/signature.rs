@@ -15,9 +15,9 @@ use std::boxed::Box;
 use alloc::boxed::Box;
 
 #[cfg(feature = "std")]
-use std::collections::HashMap;
+use hashbrown::HashMap;
 #[cfg(feature = "std")]
-use std::collections::hash_map::Values;
+use hashbrown::hash_map::Values;
 #[cfg(feature = "std")]
 use std::cmp::Ordering;
 #[cfg(feature = "std")]
