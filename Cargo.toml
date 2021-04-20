@@ -15,6 +15,7 @@ exclude = [ ".gitignore" ]
 
 [dependencies]
 curve25519-dalek = { version = "3", default-features = false }
+ed25519-dalek = { version = "1", default-features = false }
 rand = { version = "0.7" }
 sha2 = { version = "0.9" }
 subtle = { version = "2.4", default-features = false }
@@ -23,7 +24,6 @@ hashbrown = { version = "0.11", default-features = false, features = ["ahash", "
 
 [dev-dependencies]
 criterion = { version = "0.3" }
-ed25519-dalek = { version = "1", default-features = false }
 
 [[bench]]
 name = "dalek_benchmarks"
