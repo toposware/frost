@@ -48,7 +48,7 @@ mod dkg_benches {
 
         let mut participants_except_p1 = Vec::<Participant>::with_capacity((NUMBER_OF_PARTICIPANTS - 1) as usize);
         let (p1, coefficient) = Participant::new(&params, 1);
-
+        
         for i in 2..NUMBER_OF_PARTICIPANTS+1 {
             let (p,_) = Participant::new(&params, i);
             participants_except_p1.push(p);
@@ -67,7 +67,7 @@ mod dkg_benches {
 
         let mut participants = Vec::<Participant>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
         let mut coefficients = Vec::<Coefficients>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
-
+        
         for i in 1..NUMBER_OF_PARTICIPANTS+1 {
             let (p,c) = Participant::new(&params, i);
             participants.push(p);
@@ -104,7 +104,7 @@ mod dkg_benches {
 
         let mut participants = Vec::<Participant>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
         let mut coefficients = Vec::<Coefficients>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
-
+        
         for i in 1..NUMBER_OF_PARTICIPANTS+1 {
             let (p,c) = Participant::new(&params, i);
             participants.push(p);
@@ -159,7 +159,7 @@ mod sign_benches {
 
         let mut participants = Vec::<Participant>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
         let mut coefficients = Vec::<Coefficients>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
-
+        
         for i in 1..NUMBER_OF_PARTICIPANTS+1 {
             let (p,c) = Participant::new(&params, i);
             participants.push(p);
@@ -168,7 +168,7 @@ mod sign_benches {
 
         let mut participants_secret_shares: Vec<Vec::<SecretShare>> = 
                 (0..NUMBER_OF_PARTICIPANTS).map(|_| Vec::with_capacity((NUMBER_OF_PARTICIPANTS - 1) as usize)).collect();
-
+        
         let mut participants_states_1 = Vec::<DistributedKeyGeneration::<_>>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
         let mut participants_states_2 = Vec::<DistributedKeyGeneration::<_>>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
 
@@ -247,7 +247,7 @@ mod sign_benches {
 
         let mut participants = Vec::<Participant>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
         let mut coefficients = Vec::<Coefficients>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
-
+        
         for i in 1..NUMBER_OF_PARTICIPANTS+1 {
             let (p,c) = Participant::new(&params, i);
             participants.push(p);
@@ -256,7 +256,7 @@ mod sign_benches {
 
         let mut participants_secret_shares: Vec<Vec::<SecretShare>> = 
                 (0..NUMBER_OF_PARTICIPANTS).map(|_| Vec::with_capacity((NUMBER_OF_PARTICIPANTS - 1) as usize)).collect();
-
+        
         let mut participants_states_1 = Vec::<DistributedKeyGeneration::<_>>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
         let mut participants_states_2 = Vec::<DistributedKeyGeneration::<_>>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
 
@@ -345,7 +345,7 @@ mod sign_benches {
 
         let mut participants = Vec::<Participant>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
         let mut coefficients = Vec::<Coefficients>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
-
+        
         for i in 1..NUMBER_OF_PARTICIPANTS+1 {
             let (p,c) = Participant::new(&params, i);
             participants.push(p);
@@ -354,7 +354,7 @@ mod sign_benches {
 
         let mut participants_secret_shares: Vec<Vec::<SecretShare>> = 
                 (0..NUMBER_OF_PARTICIPANTS).map(|_| Vec::with_capacity((NUMBER_OF_PARTICIPANTS - 1) as usize)).collect();
-
+        
         let mut participants_states_1 = Vec::<DistributedKeyGeneration::<_>>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
         let mut participants_states_2 = Vec::<DistributedKeyGeneration::<_>>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
 
