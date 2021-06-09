@@ -50,13 +50,13 @@
 //! of scope, they each need to agree upon their *participant index* which is
 //! some non-zero integer unique to each of them (these are the `1`, `2`, and
 //! `3` in the following examples).
-//! 
+//!
 //! ```rust
 //! # use frost_dalek::Parameters;
 //! use frost_dalek::Participant;
 //! #
 //! # let params = Parameters { t: 2, n: 3 };
-//! 
+//!
 //! let (alice, alice_coefficients) = Participant::new(&params, 1);
 //! let (bob, bob_coefficients) = Participant::new(&params, 2);
 //! let (carol, carol_coefficients) = Participant::new(&params, 3);
@@ -665,9 +665,9 @@ extern crate std;
 extern crate alloc;
 
 pub mod keygen;
+pub mod nizk;
 pub mod parameters;
 pub mod precomputation;
-pub mod nizk;
 pub mod signature;
 
 pub use keygen::DistributedKeyGeneration;

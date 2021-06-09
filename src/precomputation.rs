@@ -81,8 +81,7 @@ impl Drop for Commitment {
 /// Test equality in constant-time.
 impl ConstantTimeEq for Commitment {
     fn ct_eq(&self, other: &Commitment) -> Choice {
-        self.nonce.ct_eq(&other.nonce) &
-            self.sealed.compress().ct_eq(&other.sealed.compress())
+        self.nonce.ct_eq(&other.nonce) & self.sealed.compress().ct_eq(&other.sealed.compress())
     }
 }
 
@@ -150,8 +149,7 @@ pub fn generate_commitment_share_lists(
     mut csprng: impl CryptoRng + Rng,
     participant_index: u32,
     number_of_shares: usize,
-) -> (PublicCommitmentShareList, SecretCommitmentShareList)
-{
+) -> (PublicCommitmentShareList, SecretCommitmentShareList) {
     let mut commitments: Vec<CommitmentShare> = Vec::with_capacity(number_of_shares);
 
     for _ in 0..number_of_shares {
@@ -164,8 +162,13 @@ pub fn generate_commitment_share_lists(
         published.push(commitment.publish());
     }
 
-    (PublicCommitmentShareList { participant_index, commitments: published },
-     SecretCommitmentShareList { commitments })
+    (
+        PublicCommitmentShareList {
+            participant_index,
+            commitments: published,
+        },
+        SecretCommitmentShareList { commitments },
+    )
 }
 
 // XXX TODO This should maybe be a field on SecretKey with some sort of
@@ -212,15 +215,20 @@ mod test {
 
     #[test]
     fn commitment_share_list_generate() {
-        let (public_share_list, secret_share_list) = generate_commitment_share_lists(&mut OsRng, 0, 5);
+        let (public_share_list, secret_share_list) =
+            generate_commitment_share_lists(&mut OsRng, 0, 5);
 
-        assert_eq!(public_share_list.commitments[0].0.compress(),
-                   (&secret_share_list.commitments[0].hiding.nonce * &RISTRETTO_BASEPOINT_TABLE).compress());
+        assert_eq!(
+            public_share_list.commitments[0].0.compress(),
+            (&secret_share_list.commitments[0].hiding.nonce * &RISTRETTO_BASEPOINT_TABLE)
+                .compress()
+        );
     }
 
     #[test]
     fn drop_used_commitment_shares() {
-        let (_public_share_list, mut secret_share_list) = generate_commitment_share_lists(&mut OsRng, 3, 8);
+        let (_public_share_list, mut secret_share_list) =
+            generate_commitment_share_lists(&mut OsRng, 3, 8);
 
         assert!(secret_share_list.commitments.len() == 8);
 

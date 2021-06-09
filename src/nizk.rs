@@ -48,8 +48,7 @@ impl NizkOfSecretKey {
         secret_key: &Scalar,
         public_key: &RistrettoPoint,
         mut csprng: impl Rng + CryptoRng,
-    ) -> Self
-    {
+    ) -> Self {
         let k: Scalar = Scalar::random(&mut csprng);
         let M: RistrettoPoint = &k * &RISTRETTO_BASEPOINT_TABLE;
 
@@ -68,7 +67,8 @@ impl NizkOfSecretKey {
 
     /// Verify that the prover does indeed know the secret key.
     pub fn verify(&self, index: &u32, public_key: &RistrettoPoint) -> Result<(), ()> {
-        let M_prime: RistrettoPoint = (&RISTRETTO_BASEPOINT_TABLE * &self.r) + (public_key * -&self.s);
+        let M_prime: RistrettoPoint =
+            (&RISTRETTO_BASEPOINT_TABLE * &self.r) + (public_key * -&self.s);
 
         let mut hram = Sha512::new();
 
