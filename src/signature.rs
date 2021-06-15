@@ -668,12 +668,13 @@ mod test {
     fn signing_and_verification_single_party() {
         let params = Parameters { n: 1, t: 1 };
 
-        let (p1, p1coeffs) = Participant::new(&params, 1);
+        let (p1, p1coeffs) = Participant::new(&params, 1, &RistrettoPoint::identity());
 
         p1.proof_of_secret_key.verify(&p1.index, &p1.commitments[0]).unwrap();
 
         let mut p1_other_participants: Vec<Participant> = Vec::new();
         let p1_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+                                                                 &Scalar::one(),
                                                                  &p1.index,
                                                                  &p1coeffs,
                                                                  &mut p1_other_participants).unwrap();
@@ -717,10 +718,11 @@ mod test {
     fn signing_and_verification_1_out_of_1() {
         let params = Parameters { n: 1, t: 1 };
 
-        let (p1, p1coeffs) = Participant::new(&params, 1);
+        let (p1, p1coeffs) = Participant::new(&params, 1, &RistrettoPoint::identity());
 
         let mut p1_other_participants: Vec<Participant> = Vec::with_capacity(0);
         let p1_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+                                                                 &Scalar::one(),
                                                                  &p1.index,
                                                                  &p1coeffs,
                                                                  &mut p1_other_participants).unwrap();
@@ -755,11 +757,12 @@ mod test {
     fn signing_and_verification_1_out_of_2() {
         let params = Parameters { n: 2, t: 1 };
 
-        let (p1, p1coeffs) = Participant::new(&params, 1);
-        let (p2, p2coeffs) = Participant::new(&params, 2);
+        let (p1, p1coeffs) = Participant::new(&params, 1, &RistrettoPoint::identity());
+        let (p2, p2coeffs) = Participant::new(&params, 2, &RistrettoPoint::identity());
 
         let mut p1_other_participants: Vec<Participant> = vec!(p2.clone());
         let p1_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+                                                                 &Scalar::one(),
                                                                  &p1.index,
                                                                  &p1coeffs,
                                                                  &mut p1_other_participants).unwrap();
@@ -767,6 +770,7 @@ mod test {
 
         let mut p2_other_participants: Vec<Participant> = vec!(p1.clone());
         let p2_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+                                                                 &Scalar::one(),
                                                                  &p2.index,
                                                                  &p2coeffs,
                                                                  &mut p2_other_participants).unwrap();
@@ -807,14 +811,15 @@ mod test {
     fn signing_and_verification_3_out_of_5() {
         let params = Parameters { n: 5, t: 3 };
 
-        let (p1, p1coeffs) = Participant::new(&params, 1);
-        let (p2, p2coeffs) = Participant::new(&params, 2);
-        let (p3, p3coeffs) = Participant::new(&params, 3);
-        let (p4, p4coeffs) = Participant::new(&params, 4);
-        let (p5, p5coeffs) = Participant::new(&params, 5);
+        let (p1, p1coeffs) = Participant::new(&params, 1, &RistrettoPoint::identity());
+        let (p2, p2coeffs) = Participant::new(&params, 2, &RistrettoPoint::identity());
+        let (p3, p3coeffs) = Participant::new(&params, 3, &RistrettoPoint::identity());
+        let (p4, p4coeffs) = Participant::new(&params, 4, &RistrettoPoint::identity());
+        let (p5, p5coeffs) = Participant::new(&params, 5, &RistrettoPoint::identity());
 
         let mut p1_other_participants: Vec<Participant> = vec!(p2.clone(), p3.clone(), p4.clone(), p5.clone());
         let p1_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+                                                                 &Scalar::one(),
                                                                  &p1.index,
                                                                  &p1coeffs,
                                                                  &mut p1_other_participants).unwrap();
@@ -822,6 +827,7 @@ mod test {
 
         let mut p2_other_participants: Vec<Participant> = vec!(p1.clone(), p3.clone(), p4.clone(), p5.clone());
         let p2_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+                                                                 &Scalar::one(),
                                                                  &p2.index,
                                                                  &p2coeffs,
                                                                  &mut p2_other_participants).unwrap();
@@ -829,6 +835,7 @@ mod test {
 
         let mut p3_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p4.clone(), p5.clone());
         let p3_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+                                                                 &Scalar::one(),
                                                                  &p3.index,
                                                                  &p3coeffs,
                                                                  &mut p3_other_participants).unwrap();
@@ -836,6 +843,7 @@ mod test {
 
         let mut p4_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p3.clone(), p5.clone());
         let p4_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+                                                                 &Scalar::one(),
                                                                  &p4.index,
                                                                  &p4coeffs,
                                                                  &mut p4_other_participants).unwrap();
@@ -843,6 +851,7 @@ mod test {
 
         let mut p5_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p3.clone(), p4.clone());
         let p5_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+                                                                 &Scalar::one(),
                                                                  &p5.index,
                                                                  &p5coeffs,
                                                                  &mut p5_other_participants).unwrap();
@@ -920,15 +929,16 @@ mod test {
         fn do_keygen() -> Result<(Parameters, SecretKey, SecretKey, SecretKey, GroupKey), ()> {
             let params = Parameters { n: 3, t: 2 };
 
-            let (p1, p1coeffs) = Participant::new(&params, 1);
-            let (p2, p2coeffs) = Participant::new(&params, 2);
-            let (p3, p3coeffs) = Participant::new(&params, 3);
+            let (p1, p1coeffs) = Participant::new(&params, 1, &RistrettoPoint::identity());
+            let (p2, p2coeffs) = Participant::new(&params, 2, &RistrettoPoint::identity());
+            let (p3, p3coeffs) = Participant::new(&params, 3, &RistrettoPoint::identity());
 
             p2.proof_of_secret_key.verify(&p2.index, &p2.commitments[0])?;
             p3.proof_of_secret_key.verify(&p3.index, &p3.commitments[0])?;
 
             let mut p1_other_participants: Vec<Participant> = vec!(p2.clone(), p3.clone());
             let p1_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+                                                                     &Scalar::one(),
                                                                      &p1.index,
                                                                      &p1coeffs,
                                                                      &mut p1_other_participants).or(Err(()))?;
@@ -936,6 +946,7 @@ mod test {
 
             let mut p2_other_participants: Vec<Participant> = vec!(p1.clone(), p3.clone());
             let p2_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+                                                                     &Scalar::one(),
                                                                      &p2.index,
                                                                      &p2coeffs,
                                                                      &mut p2_other_participants).or(Err(()))?;
@@ -943,6 +954,7 @@ mod test {
 
             let mut p3_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone());
             let  p3_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+                                                                      &Scalar::one(),
                                                                       &p3.index,
                                                                       &p3coeffs,
                                                                       &mut p3_other_participants).or(Err(()))?;
