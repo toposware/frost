@@ -109,9 +109,9 @@
 //!                                                      &mut alice_other_participants).or(Err(()))?;
 //!
 //! // Alice then collects the secret shares which they send to the other participants:
-//! let alice_their_secret_shares = alice_state.their_secret_shares()?;
-//! // send_to_bob(alice_their_secret_shares[0]);
-//! // send_to_carol(alice_their_secret_shares[1]);
+//! let alice_their_encrypted_secret_shares = alice_state.their_encrypted_secret_shares()?;
+//! // send_to_bob(alice_their_encrypted_secret_shares[0]);
+//! // send_to_carol(alice_their_encrypted_secret_shares[1]);
 //!
 //! // Bob enters round one of the distributed key generation protocol.
 //! let mut bob_other_participants: Vec<Participant> = vec!(alice.clone(), carol.clone());
@@ -119,9 +119,9 @@
 //!                                                    &mut bob_other_participants).or(Err(()))?;
 //!
 //! // Bob then collects the secret shares which they send to the other participants:
-//! let bob_their_secret_shares = bob_state.their_secret_shares()?;
-//! // send_to_alice(bob_their_secret_shares[0]);
-//! // send_to_carol(bob_their_secret_shares[1]);
+//! let bob_their_encrypted_secret_shares = bob_state.their_encrypted_secret_shares()?;
+//! // send_to_alice(bob_their_encrypted_secret_shares[0]);
+//! // send_to_carol(bob_their_encrypted_secret_shares[1]);
 //!
 //! // Carol enters round one of the distributed key generation protocol.
 //! let mut carol_other_participants: Vec<Participant> = vec!(alice.clone(), bob.clone());
@@ -129,23 +129,23 @@
 //!                                                      &mut carol_other_participants).or(Err(()))?;
 //!
 //! // Carol then collects the secret shares which they send to the other participants:
-//! let carol_their_secret_shares = carol_state.their_secret_shares()?;
-//! // send_to_alice(carol_their_secret_shares[0]);
-//! // send_to_bob(carol_their_secret_shares[1]);
+//! let carol_their_encrypted_secret_shares = carol_state.their_encrypted_secret_shares()?;
+//! // send_to_alice(carol_their_encrypted_secret_shares[0]);
+//! // send_to_bob(carol_their_encrypted_secret_shares[1]);
 //!
 //! // Each participant now has a vector of secret shares given to them by the other participants:
-//! let alice_my_secret_shares = vec!(bob_their_secret_shares[0].clone(),
-//!                                   carol_their_secret_shares[0].clone());
-//! let bob_my_secret_shares = vec!(alice_their_secret_shares[0].clone(),
-//!                                 carol_their_secret_shares[1].clone());
-//! let carol_my_secret_shares = vec!(alice_their_secret_shares[1].clone(),
-//!                                   bob_their_secret_shares[1].clone());
+//! let alice_my_encrypted_secret_shares = vec!(bob_their_encrypted_secret_shares[0].clone(),
+//!                                   carol_their_encrypted_secret_shares[0].clone());
+//! let bob_my_encrypted_secret_shares = vec!(alice_their_encrypted_secret_shares[0].clone(),
+//!                                 carol_their_encrypted_secret_shares[1].clone());
+//! let carol_my_encrypted_secret_shares = vec!(alice_their_encrypted_secret_shares[1].clone(),
+//!                                   bob_their_encrypted_secret_shares[1].clone());
 //!
 //! // The participants then use these secret shares from the other participants to advance to
 //! // round two of the distributed key generation protocol.
-//! let alice_state = alice_state.to_round_two(alice_my_secret_shares)?;
-//! let bob_state = bob_state.to_round_two(bob_my_secret_shares)?;
-//! let carol_state = carol_state.to_round_two(carol_my_secret_shares)?;
+//! let alice_state = alice_state.to_round_two(alice_my_encrypted_secret_shares)?;
+//! let bob_state = bob_state.to_round_two(bob_my_encrypted_secret_shares)?;
+//! let carol_state = carol_state.to_round_two(carol_my_encrypted_secret_shares)?;
 //!
 //! // Each participant can now derive their long-lived secret keys and the group's
 //! // public key.
@@ -181,6 +181,8 @@ use alloc::boxed::Box;
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 
+use core::convert::TryInto;
+
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_TABLE;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::ristretto::RistrettoPoint;
@@ -188,11 +190,19 @@ use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::traits::Identity;
 
 use rand::rngs::OsRng;
+use rand::Rng;
 
 use zeroize::Zeroize;
 
 use crate::nizk::NizkOfSecretKey;
 use crate::parameters::Parameters;
+
+use aes::{Aes256, Block};
+use aes::cipher::{
+    BlockEncrypt, BlockDecrypt, NewBlockCipher,
+    generic_array::GenericArray,
+    consts::U32,
+};
 
 /// A struct for holding a shard of the shared secret, in order to ensure that
 /// the shard is overwritten with zeroes when it falls out of scope.
@@ -403,6 +413,9 @@ struct ActualState {
     /// respective participant's commitments to their private polynomial
     /// coefficients.
     their_commitments: Vec<(u32, VerifiableSecretSharingCommitment)>,
+    /// A vector of ECPoints containing the index of each participant and that
+    /// respective participant's DH public key.
+    their_DH_public_keys: Vec<(u32, RistrettoPoint)>,
     /// A secret share for this participant.
     my_secret_share: SecretShare,
     /// The secret shares this participant has calculated for all the other participants.
@@ -445,6 +458,44 @@ pub trait Round2: private::Sealed {}
 impl Round1 for RoundOne {}
 impl Round2 for RoundTwo {}
 
+fn encrypt_share(share: &SecretShare, aes_key: &GenericArray<u8, U32>) -> EncryptedSecretShare {
+    let share_bytes = share.polynomial_evaluation.to_bytes();
+    let mut high_block = *Block::from_slice(&share_bytes[..16]);
+    let mut low_block = *Block::from_slice(&share_bytes[16..]);
+
+    let cipher = Aes256::new(&aes_key);
+
+    cipher.encrypt_block(&mut high_block);
+    cipher.encrypt_block(&mut low_block);
+
+    EncryptedSecretShare {
+        index: share.index,
+        encrypted_high_block: high_block[..].try_into().unwrap(),
+        encrypted_low_block: low_block[..].try_into().unwrap()
+    }
+}
+
+fn decrypt_share(encrypted_share: &EncryptedSecretShare, aes_key: &GenericArray<u8, U32>) -> SecretShare {
+    let mut high_block = *Block::from_slice(&encrypted_share.encrypted_high_block);
+    let mut low_block = *Block::from_slice(&encrypted_share.encrypted_low_block);
+
+    let cipher = Aes256::new(&aes_key);
+
+    cipher.decrypt_block(&mut high_block);
+    cipher.decrypt_block(&mut low_block);
+
+    let mut bytes: [u8; 32] = [0; 32];
+
+    bytes[0..16].copy_from_slice(&high_block);
+    bytes[16..32].copy_from_slice(&low_block);
+
+    SecretShare { index: encrypted_share.index, 
+                  polynomial_evaluation: Scalar::from_canonical_bytes(bytes).unwrap() }
+
+
+}
+
+
 /// Every participant in the distributed key generation has sent a vector of
 /// commitments and a zero-knowledge proof of a secret key to every other
 /// participant in the protocol.  During round one, each participant checks the
@@ -474,6 +525,7 @@ impl DistributedKeyGeneration<RoundOne> {
     ) -> Result<Self, Vec<u32>>
     {
         let mut their_commitments: Vec<(u32, VerifiableSecretSharingCommitment)> = Vec::with_capacity(parameters.t as usize);
+        let mut their_DH_public_keys: Vec<(u32, RistrettoPoint)> = Vec::with_capacity(parameters.t as usize);
         let mut misbehaving_participants: Vec<u32> = Vec::new();
 
         // Bail if we didn't get enough participants.
@@ -494,7 +546,10 @@ impl DistributedKeyGeneration<RoundOne> {
                 }
             };
             match p.proof_of_secret_key.verify(&p.index, &public_key) {
-                Ok(_)  => their_commitments.push((p.index, VerifiableSecretSharingCommitment(p.commitments.clone()))),
+                Ok(_)  => {
+                            their_commitments.push((p.index, VerifiableSecretSharingCommitment(p.commitments.clone())));
+                            their_DH_public_keys.push((p.index, p.DH_public_key));
+                          },
                 Err(_) => misbehaving_participants.push(p.index),
             }
         }
@@ -506,15 +561,42 @@ impl DistributedKeyGeneration<RoundOne> {
 
         // [DIFFERENT_TO_PAPER] We pre-calculate the secret shares from Round 2
         // Step 1 here since it doesn't require additional online activity.
+        // RICE-FROST: We also encrypt them into their_encrypted_secret_shares.
         //
         // Round 2
         // Step 1: Each P_i securely sends to each other participant P_l a secret share
         //         (l, f_i(l)) and keeps (i, f_i(i)) for themselves.
         let mut their_secret_shares: Vec<SecretShare> = Vec::with_capacity(parameters.n as usize - 1);
+        let mut their_encrypted_secret_shares: Vec<EncryptedSecretShare> = Vec::with_capacity(parameters.n as usize - 1);
 
         // XXX need a way to index their_secret_shares
         for p in other_participants.iter() {
-            their_secret_shares.push(SecretShare::evaluate_polynomial(&p.index, my_coefficients));
+            let share = SecretShare::evaluate_polynomial(&p.index, my_coefficients);
+
+            let DH_key = (p.DH_public_key * DH_secret_key).compress().to_bytes();
+            let DH_key = GenericArray::from_slice(&DH_key);
+
+/*            let share_bytes = share.polynomial_evaluation.to_bytes();
+            let mut high_block = *Block::from_slice(&share_bytes[..16]);
+            let mut low_block = *Block::from_slice(&share_bytes[16..]);
+
+            let cipher = Aes256::new(&DH_key);
+
+            cipher.encrypt_block(&mut high_block);
+            cipher.encrypt_block(&mut low_block);
+
+            let encrypted_share = EncryptedSecretShare {
+                index: p.index,
+                encrypted_high_block: high_block[..].try_into().unwrap(),
+                encrypted_low_block: low_block[..].try_into().unwrap()
+            };
+*/
+            their_encrypted_secret_shares.push(encrypt_share(&share, DH_key));
+
+            their_secret_shares.push(share);
+            
+
+            // println!("Block 1: {:?}", block_high);
         }
 
         let my_secret_share = SecretShare::evaluate_polynomial(my_index, my_coefficients);
@@ -522,11 +604,10 @@ impl DistributedKeyGeneration<RoundOne> {
             parameters: *parameters,
             DH_secret_key: *DH_secret_key,
             their_commitments,
+            their_DH_public_keys,
             my_secret_share,
             their_secret_shares: Some(their_secret_shares),
-            // TODO: change that None to something
-            //       and compute them
-            their_encrypted_secret_shares: None,
+            their_encrypted_secret_shares: Some(their_encrypted_secret_shares),
             my_secret_shares: None,
             my_encrypted_secret_shares: None,
         };
@@ -556,7 +637,7 @@ impl DistributedKeyGeneration<RoundOne> {
     #[allow(clippy::wrong_self_convention)]
     pub fn to_round_two(
         mut self,
-        my_secret_shares: Vec<SecretShare>,
+        my_encrypted_secret_shares: Vec<EncryptedSecretShare>,
     ) -> Result<DistributedKeyGeneration<RoundTwo>, ()>
     {
         // Zero out the other participants secret shares from memory.
@@ -574,7 +655,9 @@ impl DistributedKeyGeneration<RoundOne> {
         }
 
         // RICE-FROST
-        /*
+
+        /*let mut my_encrypted_secret_shares: Vec<EncryptedSecretShare> = Vec::new();*/
+        
         if my_encrypted_secret_shares.len() != self.state.parameters.n as usize - 1 {
             return Err(());
         }
@@ -583,15 +666,45 @@ impl DistributedKeyGeneration<RoundOne> {
 
         // Step 2.1: Each P_i decrypts their shares with
         //           key k_il = pk_l^sk_i
-        for share in my_encrypted_secret_shares.iter(){
-            // TODO:
-            // 1) compute decryption key
-            // 2) decrypt encrypted share
-            // 3) push decrypted share into my_secret_shares
-            my_secret_shares.push(SecretShare { index: share.index, polynomial_evaluation: Scalar::zero() })
+        for encrypted_share in my_encrypted_secret_shares.iter(){
+            for pk in self.state.their_DH_public_keys.iter(){
+                if pk.0 == encrypted_share.index {
+                    // TODO:
+                    // 1) compute decryption key
+                    // 2) decrypt encrypted share
+                    // 3) push decrypted share into my_secret_shares
+
+                    let DH_key = (pk.1 * self.state.DH_secret_key).compress().to_bytes();
+                    let DH_key = GenericArray::from_slice(&DH_key);
+                    // let share_bytes = share.polynomial_evaluation.to_bytes();
+                    /*let mut high_block = *Block::from_slice(&encrypted_share.encrypted_high_block);
+                    let mut low_block = *Block::from_slice(&encrypted_share.encrypted_low_block);
+
+                    let cipher = Aes256::new(&DH_key);
+
+                    cipher.decrypt_block(&mut high_block);
+                    cipher.decrypt_block(&mut low_block);
+
+                    let mut bytes: [u8; 32] = [0; 32];
+
+                    bytes[0..16].copy_from_slice(&high_block);
+                    bytes[16..32].copy_from_slice(&low_block);
+*/
+
+
+                    /*let encrypted_share = EncryptedSecretShare {
+                        index: p.index,
+                        encrypted_high_block: high_block[..].try_into().unwrap(),
+                        encrypted_low_block: low_block[..].try_into().unwrap()
+                    };
+*/
+                    my_secret_shares.push(decrypt_share(&encrypted_share, &DH_key));
+                }
+                
+            }
         }
 
-        */
+        
 
 
         // Step 2.2: Each P_i verifies their shares by calculating:
@@ -684,7 +797,8 @@ pub struct EncryptedSecretShare {
     pub index: u32,
     /// The encrypted polynomial evaluation.
     /// TODO: figure out the right type!
-    pub(crate) encrypted_polynomial_evaluation: Vec<u8>,
+    pub(crate) encrypted_high_block: [u8; 16],
+    pub(crate) encrypted_low_block: [u8; 16],
 }
 
 
@@ -1026,8 +1140,8 @@ mod test {
                                                                  &p1.index,
                                                                  &p1coeffs,
                                                                  &mut p1_other_participants).unwrap();
-        let p1_my_secret_shares = Vec::new();
-        let p1_state = p1_state.to_round_two(p1_my_secret_shares).unwrap();
+        let p1_my_encrypted_secret_shares = Vec::new();
+        let p1_state = p1_state.to_round_two(p1_my_encrypted_secret_shares).unwrap();
         let result = p1_state.finish(p1.public_key().unwrap());
 
         assert!(result.is_ok());
@@ -1059,7 +1173,7 @@ mod test {
                                                                  &p1.index,
                                                                  &p1coeffs,
                                                                  &mut p1_other_participants).unwrap();
-        let p1_their_secret_shares = p1_state.their_secret_shares().unwrap();
+        let p1_their_encrypted_secret_shares = p1_state.their_encrypted_secret_shares().unwrap();
 
         let mut p2_other_participants: Vec<Participant> = vec!(p1.clone(), p3.clone(), p4.clone(), p5.clone());
         let p2_state = DistributedKeyGeneration::<RoundOne>::new(&params,
@@ -1067,7 +1181,7 @@ mod test {
                                                                  &p2.index,
                                                                  &p2coeffs,
                                                                  &mut p2_other_participants).unwrap();
-        let p2_their_secret_shares = p2_state.their_secret_shares().unwrap();
+        let p2_their_encrypted_secret_shares = p2_state.their_encrypted_secret_shares().unwrap();
 
         let mut p3_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p4.clone(), p5.clone());
         let  p3_state = DistributedKeyGeneration::<RoundOne>::new(&params,
@@ -1075,7 +1189,7 @@ mod test {
                                                                   &p3.index,
                                                                   &p3coeffs,
                                                                   &mut p3_other_participants).unwrap();
-        let p3_their_secret_shares = p3_state.their_secret_shares().unwrap();
+        let p3_their_encrypted_secret_shares = p3_state.their_encrypted_secret_shares().unwrap();
 
         let mut p4_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p3.clone(), p5.clone());
         let p4_state = DistributedKeyGeneration::<RoundOne>::new(&params,
@@ -1083,7 +1197,7 @@ mod test {
                                                                  &p4.index,
                                                                  &p4coeffs,
                                                                  &mut p4_other_participants).unwrap();
-        let p4_their_secret_shares = p4_state.their_secret_shares().unwrap();
+        let p4_their_encrypted_secret_shares = p4_state.their_encrypted_secret_shares().unwrap();
 
         let mut p5_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p3.clone(), p4.clone());
         let p5_state = DistributedKeyGeneration::<RoundOne>::new(&params,
@@ -1091,38 +1205,38 @@ mod test {
                                                                  &p5.index,
                                                                  &p5coeffs,
                                                                  &mut p5_other_participants).unwrap();
-        let p5_their_secret_shares = p5_state.their_secret_shares().unwrap();
+        let p5_their_encrypted_secret_shares = p5_state.their_encrypted_secret_shares().unwrap();
 
-        let p1_my_secret_shares = vec!(p2_their_secret_shares[0].clone(), // XXX FIXME indexing
-                                       p3_their_secret_shares[0].clone(),
-                                       p4_their_secret_shares[0].clone(),
-                                       p5_their_secret_shares[0].clone());
+        let p1_my_encrypted_secret_shares = vec!(p2_their_encrypted_secret_shares[0].clone(), // XXX FIXME indexing
+                                       p3_their_encrypted_secret_shares[0].clone(),
+                                       p4_their_encrypted_secret_shares[0].clone(),
+                                       p5_their_encrypted_secret_shares[0].clone());
 
-        let p2_my_secret_shares = vec!(p1_their_secret_shares[0].clone(),
-                                       p3_their_secret_shares[1].clone(),
-                                       p4_their_secret_shares[1].clone(),
-                                       p5_their_secret_shares[1].clone());
+        let p2_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[0].clone(),
+                                       p3_their_encrypted_secret_shares[1].clone(),
+                                       p4_their_encrypted_secret_shares[1].clone(),
+                                       p5_their_encrypted_secret_shares[1].clone());
 
-        let p3_my_secret_shares = vec!(p1_their_secret_shares[1].clone(),
-                                       p2_their_secret_shares[1].clone(),
-                                       p4_their_secret_shares[2].clone(),
-                                       p5_their_secret_shares[2].clone());
+        let p3_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[1].clone(),
+                                       p2_their_encrypted_secret_shares[1].clone(),
+                                       p4_their_encrypted_secret_shares[2].clone(),
+                                       p5_their_encrypted_secret_shares[2].clone());
 
-        let p4_my_secret_shares = vec!(p1_their_secret_shares[2].clone(),
-                                       p2_their_secret_shares[2].clone(),
-                                       p3_their_secret_shares[2].clone(),
-                                       p5_their_secret_shares[3].clone());
+        let p4_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[2].clone(),
+                                       p2_their_encrypted_secret_shares[2].clone(),
+                                       p3_their_encrypted_secret_shares[2].clone(),
+                                       p5_their_encrypted_secret_shares[3].clone());
 
-        let p5_my_secret_shares = vec!(p1_their_secret_shares[3].clone(),
-                                       p2_their_secret_shares[3].clone(),
-                                       p3_their_secret_shares[3].clone(),
-                                       p4_their_secret_shares[3].clone());
+        let p5_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[3].clone(),
+                                       p2_their_encrypted_secret_shares[3].clone(),
+                                       p3_their_encrypted_secret_shares[3].clone(),
+                                       p4_their_encrypted_secret_shares[3].clone());
 
-        let p1_state = p1_state.to_round_two(p1_my_secret_shares).unwrap();
-        let p2_state = p2_state.to_round_two(p2_my_secret_shares).unwrap();
-        let p3_state = p3_state.to_round_two(p3_my_secret_shares).unwrap();
-        let p4_state = p4_state.to_round_two(p4_my_secret_shares).unwrap();
-        let p5_state = p5_state.to_round_two(p5_my_secret_shares).unwrap();
+        let p1_state = p1_state.to_round_two(p1_my_encrypted_secret_shares).unwrap();
+        let p2_state = p2_state.to_round_two(p2_my_encrypted_secret_shares).unwrap();
+        let p3_state = p3_state.to_round_two(p3_my_encrypted_secret_shares).unwrap();
+        let p4_state = p4_state.to_round_two(p4_my_encrypted_secret_shares).unwrap();
+        let p5_state = p5_state.to_round_two(p5_my_encrypted_secret_shares).unwrap();
 
         let (p1_group_key, _p1_secret_key) = p1_state.finish(p1.public_key().unwrap()).unwrap();
         let (p2_group_key, _p2_secret_key) = p2_state.finish(p2.public_key().unwrap()).unwrap();
@@ -1163,7 +1277,7 @@ mod test {
                                                                      &p1.index,
                                                                      &p1coeffs,
                                                                      &mut p1_other_participants).or(Err(()))?;
-            let p1_their_secret_shares = p1_state.their_secret_shares()?;
+            let p1_their_encrypted_secret_shares = p1_state.their_encrypted_secret_shares()?;
 
             let mut p2_other_participants: Vec<Participant> = vec!(p1.clone(), p3.clone());
             let p2_state = DistributedKeyGeneration::<RoundOne>::new(&params,
@@ -1171,7 +1285,7 @@ mod test {
                                                                      &p2.index,
                                                                      &p2coeffs,
                                                                      &mut p2_other_participants).or(Err(()))?;
-            let p2_their_secret_shares = p2_state.their_secret_shares()?;
+            let p2_their_encrypted_secret_shares = p2_state.their_encrypted_secret_shares()?;
 
             let mut p3_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone());
             let  p3_state = DistributedKeyGeneration::<RoundOne>::new(&params,
@@ -1179,18 +1293,18 @@ mod test {
                                                                       &p3.index,
                                                                       &p3coeffs,
                                                                       &mut p3_other_participants).or(Err(()))?;
-            let p3_their_secret_shares = p3_state.their_secret_shares()?;
+            let p3_their_encrypted_secret_shares = p3_state.their_encrypted_secret_shares()?;
 
-            let p1_my_secret_shares = vec!(p2_their_secret_shares[0].clone(), // XXX FIXME indexing
-                                           p3_their_secret_shares[0].clone());
-            let p2_my_secret_shares = vec!(p1_their_secret_shares[0].clone(),
-                                           p3_their_secret_shares[1].clone());
-            let p3_my_secret_shares = vec!(p1_their_secret_shares[1].clone(),
-                                           p2_their_secret_shares[1].clone());
+            let p1_my_encrypted_secret_shares = vec!(p2_their_encrypted_secret_shares[0].clone(), // XXX FIXME indexing
+                                           p3_their_encrypted_secret_shares[0].clone());
+            let p2_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[0].clone(),
+                                           p3_their_encrypted_secret_shares[1].clone());
+            let p3_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[1].clone(),
+                                           p2_their_encrypted_secret_shares[1].clone());
 
-            let p1_state = p1_state.to_round_two(p1_my_secret_shares)?;
-            let p2_state = p2_state.to_round_two(p2_my_secret_shares)?;
-            let p3_state = p3_state.to_round_two(p3_my_secret_shares)?;
+            let p1_state = p1_state.to_round_two(p1_my_encrypted_secret_shares)?;
+            let p2_state = p2_state.to_round_two(p2_my_encrypted_secret_shares)?;
+            let p3_state = p3_state.to_round_two(p3_my_encrypted_secret_shares)?;
 
             let (p1_group_key, _p1_secret_key) = p1_state.finish(p1.public_key().unwrap())?;
             let (p2_group_key, _p2_secret_key) = p2_state.finish(p2.public_key().unwrap())?;
@@ -1203,4 +1317,25 @@ mod test {
         }
         assert!(do_test().is_ok());
     }
+
+    #[test]
+    fn encrypt_and_decrypt() {
+
+        let mut rng: OsRng = OsRng;
+
+        let original_share = SecretShare { index: 1,
+                                           polynomial_evaluation: Scalar::random(&mut rng)};
+
+
+        let mut random_bytes = [0u8; 32];
+        rng.fill(&mut random_bytes);
+
+        let key = GenericArray::from_slice(&random_bytes);
+
+        let encrypted_share = encrypt_share(&original_share, &key);
+        let decrypted_share = decrypt_share(&encrypted_share, &key);
+
+        assert!(original_share.polynomial_evaluation == decrypted_share.polynomial_evaluation);
+    }
+
 }
