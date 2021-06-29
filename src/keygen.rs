@@ -818,6 +818,28 @@ pub struct EncryptedSecretShare {
     pub(crate) encrypted_low_block: [u8; 16],
 }
 
+/// A proof that a generated complaint is valid. 
+#[derive(Debug)]
+pub struct ComplaintProof {
+    /// a1 = g^r.
+    pub a1: RistrettoPoint,
+    /// a2 = pk_l^r.
+    pub a2: RistrettoPoint,
+    /// z = r + H(pk_i, pk_l, k_il).sh_i
+    pub z: Scalar,
+}
+
+/// A complaint generated when a participant receives a bad share.
+#[derive(Debug)]
+pub struct Complaint {
+    /// The index of the complaint maker.
+    pub maker_index: u32,
+    /// The index of the alleged misbehaving participant.
+    pub accused_index: u32,
+    /// The complaint proof.
+    pub proof: ComplaintProof,
+}
+
 
 /// During round two each participant verifies their secret shares they received
 /// from each other participant.
