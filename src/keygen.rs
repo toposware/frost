@@ -699,19 +699,33 @@ impl DistributedKeyGeneration<RoundOne> {
                         encrypted_low_block: low_block[..].try_into().unwrap()
                     };
 */
-                    my_secret_shares.push(decrypt_share(&encrypted_share, &DH_key));
+
+                    // Step 2.2: Each share is verified by calculating:
+                    //           g^{f_l(i)} ?= \Prod_{k=0}^{t-1} \phi_{lk}^{i^{k} mod q},
+                    //           creating a complaint if the check fails.
+                    let decrypted_share = decrypt_share(&encrypted_share, &DH_key);
+                    
+                    for (index, commitment) in self.state.their_commitments.iter() {
+                        if index == &encrypted_share.sender_index {
+                            // If the decrypted share is incorrect, P_i builds
+                            // a complaint
+                            match decrypted_share.verify(commitment){
+                                Err(_) => {
+                                    return Err(())
+                                },
+                                Ok(_) => (),
+                            };
+                        }
+                    }
+
+                    my_secret_shares.push(decrypted_share);
                 }
                 
             }
         }
 
         
-
-
-        // Step 2.2: Each P_i verifies their shares by calculating:
-        //           g^{f_l(i)} ?= \Prod_{k=0}^{t-1} \phi_{lk}^{i^{k} mod q},
-        //           aborting if the check fails.
-        for share in my_secret_shares.iter() {
+        /*for share in my_secret_shares.iter() {
             // XXX TODO implement sorting for SecretShare and also for a new Commitment type
             for (index, commitment) in self.state.their_commitments.iter() {
                 if index == &share.index {
@@ -725,7 +739,7 @@ impl DistributedKeyGeneration<RoundOne> {
                     };
                 }
             }
-        }
+        }*/
         self.state.my_secret_shares = Some(my_secret_shares);
 
         Ok(DistributedKeyGeneration::<RoundTwo> {
