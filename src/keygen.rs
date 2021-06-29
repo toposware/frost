@@ -458,7 +458,7 @@ pub trait Round2: private::Sealed {}
 impl Round1 for RoundOne {}
 impl Round2 for RoundTwo {}
 
-fn encrypt_share(share: &SecretShare, aes_key: &GenericArray<u8, U32>) -> EncryptedSecretShare {
+fn encrypt_share(my_index: &u32, share: &SecretShare, aes_key: &GenericArray<u8, U32>) -> EncryptedSecretShare {
     let share_bytes = share.polynomial_evaluation.to_bytes();
     let mut high_block = *Block::from_slice(&share_bytes[..16]);
     let mut low_block = *Block::from_slice(&share_bytes[16..]);
@@ -469,7 +469,8 @@ fn encrypt_share(share: &SecretShare, aes_key: &GenericArray<u8, U32>) -> Encryp
     cipher.encrypt_block(&mut low_block);
 
     EncryptedSecretShare {
-        index: share.index,
+        sender_index: *my_index,
+        receiver_index: share.index,
         encrypted_high_block: high_block[..].try_into().unwrap(),
         encrypted_low_block: low_block[..].try_into().unwrap()
     }
@@ -489,7 +490,7 @@ fn decrypt_share(encrypted_share: &EncryptedSecretShare, aes_key: &GenericArray<
     bytes[0..16].copy_from_slice(&high_block);
     bytes[16..32].copy_from_slice(&low_block);
 
-    SecretShare { index: encrypted_share.index, 
+    SecretShare { index: encrypted_share.receiver_index, 
                   polynomial_evaluation: Scalar::from_canonical_bytes(bytes).unwrap() }
 
 
@@ -591,7 +592,7 @@ impl DistributedKeyGeneration<RoundOne> {
                 encrypted_low_block: low_block[..].try_into().unwrap()
             };
 */
-            their_encrypted_secret_shares.push(encrypt_share(&share, DH_key));
+            their_encrypted_secret_shares.push(encrypt_share(my_index, &share, DH_key));
 
             their_secret_shares.push(share);
             
@@ -668,7 +669,7 @@ impl DistributedKeyGeneration<RoundOne> {
         //           key k_il = pk_l^sk_i
         for encrypted_share in my_encrypted_secret_shares.iter(){
             for pk in self.state.their_DH_public_keys.iter(){
-                if pk.0 == encrypted_share.index {
+                if pk.0 == encrypted_share.sender_index {
                     // TODO:
                     // 1) compute decryption key
                     // 2) decrypt encrypted share
@@ -793,8 +794,10 @@ impl SecretShare {
 #[derive(Clone, Debug, Zeroize)]
 #[zeroize(drop)]
 pub struct EncryptedSecretShare {
+    /// The index of the share maker.
+    pub sender_index: u32,
     /// The participant index that this secret share was calculated for.
-    pub index: u32,
+    pub receiver_index: u32,
     /// The encrypted polynomial evaluation.
     /// TODO: figure out the right type!
     pub(crate) encrypted_high_block: [u8; 16],
@@ -1323,7 +1326,7 @@ mod test {
 
         let mut rng: OsRng = OsRng;
 
-        let original_share = SecretShare { index: 1,
+        let original_share = SecretShare { index: 2,
                                            polynomial_evaluation: Scalar::random(&mut rng)};
 
 
@@ -1332,7 +1335,9 @@ mod test {
 
         let key = GenericArray::from_slice(&random_bytes);
 
-        let encrypted_share = encrypt_share(&original_share, &key);
+        let index = 1;
+
+        let encrypted_share = encrypt_share(&index, &original_share, &key);
         let decrypted_share = decrypt_share(&encrypted_share, &key);
 
         assert!(original_share.polynomial_evaluation == decrypted_share.polynomial_evaluation);
