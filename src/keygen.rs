@@ -498,10 +498,7 @@ fn decrypt_share(encrypted_share: &EncryptedSecretShare, aes_key: &GenericArray<
 
     SecretShare { index: encrypted_share.receiver_index, 
                   polynomial_evaluation: Scalar::from_canonical_bytes(bytes).unwrap() }
-
-
 }
-
 
 /// Every participant in the distributed key generation has sent a vector of
 /// commitments and a zero-knowledge proof of a secret key to every other
@@ -732,6 +729,7 @@ impl DistributedKeyGeneration<RoundOne> {
 
                                     complaints.push(Complaint { maker_index: encrypted_share.receiver_index,
                                                                 accused_index: pk.0,
+                                                                DH_key: *DH_key,
                                                                 proof: ComplaintProof { a1: &RISTRETTO_BASEPOINT_TABLE * &r,
                                                                                         a2: pk.1 * r,
                                                                                         z: r + h * self.state.DH_secret_key, }
@@ -862,10 +860,39 @@ pub struct Complaint {
     pub maker_index: u32,
     /// The index of the alleged misbehaving participant.
     pub accused_index: u32,
+    /// The shared DH key.
+    pub DH_key: GenericArray<u8, U32>,
     /// The complaint proof.
     pub proof: ComplaintProof,
 }
 
+impl Complaint {
+    /// A complaint is valid if:
+    /// --  a1 + h.pk_i = z.g
+    /// --  a2 + h.k_il = z.pk_l
+    pub fn verify(
+        &self, 
+        pk_i: &RistrettoPoint,
+        pk_l: &RistrettoPoint,
+    ) -> Result<(), ()> {
+        let mut h = Sha512::new();
+        h.update(pk_i.compress().to_bytes());
+        h.update(pk_l.compress().to_bytes());
+        h.update(self.DH_key);
+
+        let h = Scalar::from_hash(h);
+
+        if &self.proof.a1 + pk_i * h != &RISTRETTO_BASEPOINT_TABLE * &self.proof.z { return Err(()) }
+
+        if let Some(key_as_point) = CompressedRistretto::from_slice(&self.DH_key).decompress() {
+            if &self.proof.a2 + key_as_point * h != pk_l * &self.proof.z { return Err(()) }
+        } else {
+            return Err(())
+        }
+
+        Ok(())
+    }
+}
 
 /// During round two each participant verifies their secret shares they received
 /// from each other participant.
