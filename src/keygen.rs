@@ -192,6 +192,7 @@ use curve25519_dalek::traits::Identity;
 use rand::rngs::OsRng;
 use rand::Rng;
 
+use sha2::Digest;
 use sha2::Sha512;
 
 use zeroize::Zeroize;
@@ -719,16 +720,22 @@ impl DistributedKeyGeneration<RoundOne> {
                             // a complaint
                             match decrypted_share.verify(commitment){
                                 Err(_) => {
-                                    ()
-                                    //return Err(complaints)
-                                    /*let mut rng: OsRng = OsRng;
+                                    let mut rng: OsRng = OsRng;
                                     let r = Scalar::random(&mut rng);
+
                                     let mut h = Sha512::new();
-                                    h.update():
-                                    complaints.push(Complaint { a1: ,
-                                                                a2: ,
-                                                                z: ,
-                                                              })*/
+                                    h.update(self.state.DH_public_key.compress().to_bytes());
+                                    h.update(pk.1.compress().to_bytes());
+                                    h.update(DH_key);
+
+                                    let h = Scalar::from_hash(h);
+
+                                    complaints.push(Complaint { maker_index: encrypted_share.receiver_index,
+                                                                accused_index: pk.0,
+                                                                proof: ComplaintProof { a1: &RISTRETTO_BASEPOINT_TABLE * &r,
+                                                                                        a2: pk.1 * r,
+                                                                                        z: r + h * self.state.DH_secret_key, }
+                                                              });
                                 },
                                 Ok(_) => (),
                             };
@@ -741,7 +748,9 @@ impl DistributedKeyGeneration<RoundOne> {
             }
         }
 
-        
+        if !complaints.is_empty() {
+            return Err(complaints)
+        }
         /*for share in my_secret_shares.iter() {
             // XXX TODO implement sorting for SecretShare and also for a new Commitment type
             for (index, commitment) in self.state.their_commitments.iter() {
