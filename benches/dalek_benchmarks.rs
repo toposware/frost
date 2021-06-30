@@ -61,6 +61,7 @@ mod dkg_benches {
         c.bench_function("Round One", move |b| {
             b.iter(|| DistributedKeyGeneration::<_>::new(&params,
                                                          &Scalar::one(),
+                                                         &RistrettoPoint::identity(),
                                                          &p1.index,
                                                          &coefficient,
                                                          &mut participants_except_p1));
@@ -85,6 +86,7 @@ mod dkg_benches {
         participants_except_p1.remove(0);
         let p1_state = DistributedKeyGeneration::<_>::new(&params,
                                                           &Scalar::one(),
+                                                          &RistrettoPoint::identity(),
                                                           &participants[0].index,
                                                           &coefficients[0],
                                                           &mut participants_except_p1).unwrap();
@@ -94,6 +96,7 @@ mod dkg_benches {
             participants_except_pi.remove((i-1) as usize);
             let pi_state = DistributedKeyGeneration::<_>::new(&params,
                                                               &Scalar::one(),
+                                                              &RistrettoPoint::identity(),
                                                               &participants[(i-1) as usize].index,
                                                               &coefficients[(i-1) as usize],
                                                               &mut participants_except_pi).unwrap();
@@ -124,6 +127,7 @@ mod dkg_benches {
         participants_except_p1.remove(0);
         let p1_state = DistributedKeyGeneration::<_>::new(&params,
                                                           &Scalar::one(),
+                                                          &RistrettoPoint::identity(),
                                                           &participants[0].index,
                                                           &coefficients[0],
                                                           &mut participants_except_p1).unwrap();
@@ -133,6 +137,7 @@ mod dkg_benches {
             participants_except_pi.remove((i-1) as usize);
             let pi_state = DistributedKeyGeneration::<_>::new(&params,
                                                               &Scalar::one(),
+                                                              &RistrettoPoint::identity(),
                                                               &participants[(i-1) as usize].index,
                                                               &coefficients[(i-1) as usize],
                                                               &mut participants_except_pi).unwrap();
@@ -186,6 +191,7 @@ mod sign_benches {
             participants_except_pi.remove((i-1) as usize);
             let pi_state = DistributedKeyGeneration::<_>::new(&params,
                                                               &Scalar::one(),
+                                                              &RistrettoPoint::identity(),
                                                               &participants[(i-1) as usize].index,
                                                               &coefficients[(i-1) as usize],
                                                               &mut participants_except_pi).unwrap();
@@ -275,6 +281,7 @@ mod sign_benches {
             participants_except_pi.remove((i-1) as usize);
             let pi_state = DistributedKeyGeneration::<_>::new(&params,
                                                               &Scalar::one(),
+                                                              &RistrettoPoint::identity(),
                                                               &participants[(i-1) as usize].index,
                                                               &coefficients[(i-1) as usize],
                                                               &mut participants_except_pi).unwrap();
@@ -374,6 +381,7 @@ mod sign_benches {
             participants_except_pi.remove((i-1) as usize);
             let pi_state = DistributedKeyGeneration::<_>::new(&params,
                                                               &Scalar::one(),
+                                                              &RistrettoPoint::identity(),
                                                               &participants[(i-1) as usize].index,
                                                               &coefficients[(i-1) as usize],
                                                               &mut participants_except_pi).unwrap();

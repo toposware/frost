@@ -39,6 +39,7 @@ fn signing_and_verification_3_out_of_5() {
     let mut p1_other_participants: Vec<Participant> = vec!(p2.clone(), p3.clone(), p4.clone(), p5.clone());
     let p1_state = DistributedKeyGeneration::<_>::new(&params,
                                                       &Scalar::one(),
+                                                      &RistrettoPoint::identity(),
                                                       &p1.index,
                                                       &p1coeffs,
                                                       &mut p1_other_participants).unwrap();
@@ -47,6 +48,7 @@ fn signing_and_verification_3_out_of_5() {
     let mut p2_other_participants: Vec<Participant> = vec!(p1.clone(), p3.clone(), p4.clone(), p5.clone());
     let p2_state = DistributedKeyGeneration::<>::new(&params,
                                                      &Scalar::one(),
+                                                     &RistrettoPoint::identity(),
                                                      &p2.index,
                                                      &p2coeffs,
                                                      &mut p2_other_participants).unwrap();
@@ -55,6 +57,7 @@ fn signing_and_verification_3_out_of_5() {
     let mut p3_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p4.clone(), p5.clone());
     let p3_state = DistributedKeyGeneration::<_>::new(&params,
                                                       &Scalar::one(),
+                                                      &RistrettoPoint::identity(),
                                                       &p3.index,
                                                       &p3coeffs,
                                                       &mut p3_other_participants).unwrap();
@@ -63,6 +66,7 @@ fn signing_and_verification_3_out_of_5() {
     let mut p4_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p3.clone(), p5.clone());
     let p4_state = DistributedKeyGeneration::<_>::new(&params,
                                                       &Scalar::one(),
+                                                      &RistrettoPoint::identity(),
                                                       &p4.index,
                                                       &p4coeffs,
                                                       &mut p4_other_participants).unwrap();
@@ -71,6 +75,7 @@ fn signing_and_verification_3_out_of_5() {
     let mut p5_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p3.clone(), p4.clone());
     let p5_state = DistributedKeyGeneration::<_>::new(&params,
                                                       &Scalar::one(),
+                                                      &RistrettoPoint::identity(),
                                                       &p5.index,
                                                       &p5coeffs,
                                                       &mut p5_other_participants).unwrap();
@@ -155,6 +160,7 @@ fn signing_and_verification_with_ed25519_dalek_2_out_of_3() {
     let mut p1_other_participants: Vec<Participant> = vec!(p2.clone(), p3.clone());
     let p1_state = DistributedKeyGeneration::<_>::new(&params,
                                                       &Scalar::one(),
+                                                      &RistrettoPoint::identity(),
                                                       &p1.index,
                                                       &p1coeffs,
                                                       &mut p1_other_participants).unwrap();
@@ -163,6 +169,7 @@ fn signing_and_verification_with_ed25519_dalek_2_out_of_3() {
     let mut p2_other_participants: Vec<Participant> = vec!(p1.clone(), p3.clone());
     let p2_state = DistributedKeyGeneration::<>::new(&params,
                                                      &Scalar::one(),
+                                                     &RistrettoPoint::identity(),
                                                      &p2.index,
                                                      &p2coeffs,
                                                      &mut p2_other_participants).unwrap();
@@ -171,6 +178,7 @@ fn signing_and_verification_with_ed25519_dalek_2_out_of_3() {
     let mut p3_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone());
     let p3_state = DistributedKeyGeneration::<_>::new(&params,
                                                       &Scalar::one(),
+                                                      &RistrettoPoint::identity(),
                                                       &p3.index,
                                                       &p3coeffs,
                                                       &mut p3_other_participants).unwrap();

@@ -105,7 +105,7 @@
 //!
 //! // Alice enters round one of the distributed key generation protocol.
 //! let mut alice_other_participants: Vec<Participant> = vec!(bob.clone(), carol.clone());
-//! let alice_state = DistributedKeyGeneration::<_>::new(&params, &Scalar::one(), &alice.index, &alice_coeffs,
+//! let alice_state = DistributedKeyGeneration::<_>::new(&params, &Scalar::one(), &RistrettoPoint::identity(), &alice.index, &alice_coeffs,
 //!                                                      &mut alice_other_participants).or(Err(()))?;
 //!
 //! // Alice then collects the secret shares which they send to the other participants:
@@ -115,7 +115,7 @@
 //!
 //! // Bob enters round one of the distributed key generation protocol.
 //! let mut bob_other_participants: Vec<Participant> = vec!(alice.clone(), carol.clone());
-//! let bob_state = DistributedKeyGeneration::<_>::new(&params, &Scalar::one(), &bob.index, &bob_coeffs,
+//! let bob_state = DistributedKeyGeneration::<_>::new(&params, &Scalar::one(), &RistrettoPoint::identity(), &bob.index, &bob_coeffs,
 //!                                                    &mut bob_other_participants).or(Err(()))?;
 //!
 //! // Bob then collects the secret shares which they send to the other participants:
@@ -125,7 +125,7 @@
 //!
 //! // Carol enters round one of the distributed key generation protocol.
 //! let mut carol_other_participants: Vec<Participant> = vec!(alice.clone(), bob.clone());
-//! let carol_state = DistributedKeyGeneration::<_>::new(&params, &Scalar::one(), &carol.index, &carol_coeffs,
+//! let carol_state = DistributedKeyGeneration::<_>::new(&params, &Scalar::one(), &RistrettoPoint::identity(), &carol.index, &carol_coeffs,
 //!                                                      &mut carol_other_participants).or(Err(()))?;
 //!
 //! // Carol then collects the secret shares which they send to the other participants:
@@ -411,6 +411,9 @@ struct ActualState {
     /// The DH secret key for deriving a symettric key to encrypt and decrypt
     /// secret shares.
     DH_secret_key: Scalar,
+    /// The DH public key for deriving a symettric key to encrypt and decrypt
+    /// secret shares.
+    DH_public_key: RistrettoPoint,
     /// A vector of tuples containing the index of each participant and that
     /// respective participant's commitments to their private polynomial
     /// coefficients.
@@ -522,6 +525,7 @@ impl DistributedKeyGeneration<RoundOne> {
     pub fn new(
         parameters: &Parameters,
         DH_secret_key: &Scalar,
+        DH_public_key: &RistrettoPoint,
         my_index: &u32,
         my_coefficients: &Coefficients,
         other_participants: &mut Vec<Participant>,
@@ -606,6 +610,7 @@ impl DistributedKeyGeneration<RoundOne> {
         let state = ActualState {
             parameters: *parameters,
             DH_secret_key: *DH_secret_key,
+            DH_public_key: *DH_public_key,
             their_commitments,
             their_DH_public_keys,
             my_secret_share,
@@ -1188,6 +1193,7 @@ mod test {
         let mut p1_other_participants: Vec<Participant> = Vec::new();
         let p1_state = DistributedKeyGeneration::<RoundOne>::new(&params,
                                                                  &Scalar::one(),
+                                                                 &RistrettoPoint::identity(),
                                                                  &p1.index,
                                                                  &p1coeffs,
                                                                  &mut p1_other_participants).unwrap();
@@ -1221,6 +1227,7 @@ mod test {
         let mut p1_other_participants: Vec<Participant> = vec!(p2.clone(), p3.clone(), p4.clone(), p5.clone());
         let p1_state = DistributedKeyGeneration::<RoundOne>::new(&params,
                                                                  &Scalar::one(),
+                                                                 &RistrettoPoint::identity(),
                                                                  &p1.index,
                                                                  &p1coeffs,
                                                                  &mut p1_other_participants).unwrap();
@@ -1229,6 +1236,7 @@ mod test {
         let mut p2_other_participants: Vec<Participant> = vec!(p1.clone(), p3.clone(), p4.clone(), p5.clone());
         let p2_state = DistributedKeyGeneration::<RoundOne>::new(&params,
                                                                  &Scalar::one(),
+                                                                 &RistrettoPoint::identity(),
                                                                  &p2.index,
                                                                  &p2coeffs,
                                                                  &mut p2_other_participants).unwrap();
@@ -1237,6 +1245,7 @@ mod test {
         let mut p3_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p4.clone(), p5.clone());
         let  p3_state = DistributedKeyGeneration::<RoundOne>::new(&params,
                                                                   &Scalar::one(),
+                                                                  &RistrettoPoint::identity(),
                                                                   &p3.index,
                                                                   &p3coeffs,
                                                                   &mut p3_other_participants).unwrap();
@@ -1245,6 +1254,7 @@ mod test {
         let mut p4_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p3.clone(), p5.clone());
         let p4_state = DistributedKeyGeneration::<RoundOne>::new(&params,
                                                                  &Scalar::one(),
+                                                                 &RistrettoPoint::identity(),
                                                                  &p4.index,
                                                                  &p4coeffs,
                                                                  &mut p4_other_participants).unwrap();
@@ -1253,6 +1263,7 @@ mod test {
         let mut p5_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p3.clone(), p4.clone());
         let p5_state = DistributedKeyGeneration::<RoundOne>::new(&params,
                                                                  &Scalar::one(),
+                                                                 &RistrettoPoint::identity(),
                                                                  &p5.index,
                                                                  &p5coeffs,
                                                                  &mut p5_other_participants).unwrap();
@@ -1325,6 +1336,7 @@ mod test {
             let mut p1_other_participants: Vec<Participant> = vec!(p2.clone(), p3.clone());
             let p1_state = DistributedKeyGeneration::<RoundOne>::new(&params,
                                                                      &Scalar::one(),
+                                                                     &RistrettoPoint::identity(),
                                                                      &p1.index,
                                                                      &p1coeffs,
                                                                      &mut p1_other_participants).or(Err(()))?;
@@ -1333,6 +1345,7 @@ mod test {
             let mut p2_other_participants: Vec<Participant> = vec!(p1.clone(), p3.clone());
             let p2_state = DistributedKeyGeneration::<RoundOne>::new(&params,
                                                                      &Scalar::one(),
+                                                                     &RistrettoPoint::identity(),
                                                                      &p2.index,
                                                                      &p2coeffs,
                                                                      &mut p2_other_participants).or(Err(()))?;
@@ -1341,6 +1354,7 @@ mod test {
             let mut p3_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone());
             let  p3_state = DistributedKeyGeneration::<RoundOne>::new(&params,
                                                                       &Scalar::one(),
+                                                                      &RistrettoPoint::identity(),
                                                                       &p3.index,
                                                                       &p3coeffs,
                                                                       &mut p3_other_participants).or(Err(()))?;
