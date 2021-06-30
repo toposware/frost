@@ -967,9 +967,9 @@ mod test {
             let p3_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[1].clone(),
                                            p2_their_encrypted_secret_shares[1].clone());
 
-            let p1_state = p1_state.to_round_two(p1_my_encrypted_secret_shares)?;
-            let p2_state = p2_state.to_round_two(p2_my_encrypted_secret_shares)?;
-            let p3_state = p3_state.to_round_two(p3_my_encrypted_secret_shares)?;
+            let p1_state = p1_state.to_round_two(p1_my_encrypted_secret_shares).or(Err(()))?;
+            let p2_state = p2_state.to_round_two(p2_my_encrypted_secret_shares).or(Err(()))?;
+            let p3_state = p3_state.to_round_two(p3_my_encrypted_secret_shares).or(Err(()))?;
 
             let (p1_group_key, p1_secret_key) = p1_state.finish(p1.public_key().unwrap())?;
             let (p2_group_key, p2_secret_key) = p2_state.finish(p2.public_key().unwrap())?;

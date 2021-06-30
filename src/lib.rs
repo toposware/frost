@@ -344,9 +344,9 @@
 //! # let carol_my_encrypted_secret_shares = vec!(alice_their_encrypted_secret_shares[1].clone(),
 //! #                                   bob_their_encrypted_secret_shares[1].clone());
 //! #
-//! let alice_state = alice_state.to_round_two(alice_my_encrypted_secret_shares)?;
-//! let bob_state = bob_state.to_round_two(bob_my_encrypted_secret_shares)?;
-//! let carol_state = carol_state.to_round_two(carol_my_encrypted_secret_shares)?;
+//! let alice_state = alice_state.to_round_two(alice_my_encrypted_secret_shares).or(Err(()))?;
+//! let bob_state = bob_state.to_round_two(bob_my_encrypted_secret_shares).or(Err(()))?;
+//! let carol_state = carol_state.to_round_two(carol_my_encrypted_secret_shares).or(Err(()))?;
 //! # Ok(()) } fn main() { assert!(do_test().is_ok()); }
 //! ```
 //!
@@ -390,9 +390,9 @@
 //! # let carol_my_encrypted_secret_shares = vec!(alice_their_encrypted_secret_shares[1].clone(),
 //! #                                   bob_their_encrypted_secret_shares[1].clone());
 //! #
-//! # let alice_state = alice_state.to_round_two(alice_my_encrypted_secret_shares)?;
-//! # let bob_state = bob_state.to_round_two(bob_my_encrypted_secret_shares)?;
-//! # let carol_state = carol_state.to_round_two(carol_my_encrypted_secret_shares)?;
+//! # let alice_state = alice_state.to_round_two(alice_my_encrypted_secret_shares).or(Err(()))?;
+//! # let bob_state = bob_state.to_round_two(bob_my_encrypted_secret_shares).or(Err(()))?;
+//! # let carol_state = carol_state.to_round_two(carol_my_encrypted_secret_shares).or(Err(()))?;
 //! #
 //! let (alice_group_key, alice_secret_key) = alice_state.finish(alice.public_key().unwrap())?;
 //! let (bob_group_key, bob_secret_key) = bob_state.finish(bob.public_key().unwrap())?;
@@ -455,9 +455,9 @@
 //! # let carol_my_encrypted_secret_shares = vec!(alice_their_encrypted_secret_shares[1].clone(),
 //! #                                   bob_their_encrypted_secret_shares[1].clone());
 //! #
-//! # let alice_state = alice_state.to_round_two(alice_my_encrypted_secret_shares)?;
-//! # let bob_state = bob_state.to_round_two(bob_my_encrypted_secret_shares)?;
-//! # let carol_state = carol_state.to_round_two(carol_my_encrypted_secret_shares)?;
+//! # let alice_state = alice_state.to_round_two(alice_my_encrypted_secret_shares).or(Err(()))?;
+//! # let bob_state = bob_state.to_round_two(bob_my_encrypted_secret_shares).or(Err(()))?;
+//! # let carol_state = carol_state.to_round_two(carol_my_encrypted_secret_shares).or(Err(()))?;
 //! #
 //! # let (alice_group_key, alice_secret_key) = alice_state.finish(alice.public_key().unwrap())?;
 //! # let (bob_group_key, bob_secret_key) = bob_state.finish(bob.public_key().unwrap())?;
@@ -530,9 +530,9 @@
 //! # let carol_my_encrypted_secret_shares = vec!(alice_their_encrypted_secret_shares[1].clone(),
 //! #                                   bob_their_encrypted_secret_shares[1].clone());
 //! #
-//! # let alice_state = alice_state.to_round_two(alice_my_encrypted_secret_shares)?;
-//! # let bob_state = bob_state.to_round_two(bob_my_encrypted_secret_shares)?;
-//! # let carol_state = carol_state.to_round_two(carol_my_encrypted_secret_shares)?;
+//! # let alice_state = alice_state.to_round_two(alice_my_encrypted_secret_shares).or(Err(()))?;
+//! # let bob_state = bob_state.to_round_two(bob_my_encrypted_secret_shares).or(Err(()))?;
+//! # let carol_state = carol_state.to_round_two(carol_my_encrypted_secret_shares).or(Err(()))?;
 //! #
 //! # let (alice_group_key, alice_secret_key) = alice_state.finish(alice.public_key().unwrap())?;
 //! # let (bob_group_key, bob_secret_key) = bob_state.finish(bob.public_key().unwrap())?;

@@ -143,9 +143,9 @@
 //!
 //! // The participants then use these secret shares from the other participants to advance to
 //! // round two of the distributed key generation protocol.
-//! let alice_state = alice_state.to_round_two(alice_my_encrypted_secret_shares)?;
-//! let bob_state = bob_state.to_round_two(bob_my_encrypted_secret_shares)?;
-//! let carol_state = carol_state.to_round_two(carol_my_encrypted_secret_shares)?;
+//! let alice_state = alice_state.to_round_two(alice_my_encrypted_secret_shares).or(Err(()))?;
+//! let bob_state = bob_state.to_round_two(bob_my_encrypted_secret_shares).or(Err(()))?;
+//! let carol_state = carol_state.to_round_two(carol_my_encrypted_secret_shares).or(Err(()))?;
 //!
 //! // Each participant can now derive their long-lived secret keys and the group's
 //! // public key.
@@ -191,6 +191,8 @@ use curve25519_dalek::traits::Identity;
 
 use rand::rngs::OsRng;
 use rand::Rng;
+
+use sha2::Sha512;
 
 use zeroize::Zeroize;
 
@@ -639,7 +641,7 @@ impl DistributedKeyGeneration<RoundOne> {
     pub fn to_round_two(
         mut self,
         my_encrypted_secret_shares: Vec<EncryptedSecretShare>,
-    ) -> Result<DistributedKeyGeneration<RoundTwo>, ()>
+    ) -> Result<DistributedKeyGeneration<RoundTwo>, Vec<Complaint>>
     {
         // Zero out the other participants secret shares from memory.
         if self.state.their_secret_shares.is_some() {
@@ -657,10 +659,11 @@ impl DistributedKeyGeneration<RoundOne> {
 
         // RICE-FROST
 
+        let mut complaints: Vec<Complaint> = Vec::new();
         /*let mut my_encrypted_secret_shares: Vec<EncryptedSecretShare> = Vec::new();*/
         
         if my_encrypted_secret_shares.len() != self.state.parameters.n as usize - 1 {
-            return Err(());
+            return Err(complaints);
         }
 
         let mut my_secret_shares: Vec<SecretShare> = Vec::new();
@@ -711,7 +714,16 @@ impl DistributedKeyGeneration<RoundOne> {
                             // a complaint
                             match decrypted_share.verify(commitment){
                                 Err(_) => {
-                                    return Err(())
+                                    ()
+                                    //return Err(complaints)
+                                    /*let mut rng: OsRng = OsRng;
+                                    let r = Scalar::random(&mut rng);
+                                    let mut h = Sha512::new();
+                                    h.update():
+                                    complaints.push(Complaint { a1: ,
+                                                                a2: ,
+                                                                z: ,
+                                                              })*/
                                 },
                                 Ok(_) => (),
                             };
@@ -1341,9 +1353,9 @@ mod test {
             let p3_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[1].clone(),
                                            p2_their_encrypted_secret_shares[1].clone());
 
-            let p1_state = p1_state.to_round_two(p1_my_encrypted_secret_shares)?;
-            let p2_state = p2_state.to_round_two(p2_my_encrypted_secret_shares)?;
-            let p3_state = p3_state.to_round_two(p3_my_encrypted_secret_shares)?;
+            let p1_state = p1_state.to_round_two(p1_my_encrypted_secret_shares).or(Err(()))?;
+            let p2_state = p2_state.to_round_two(p2_my_encrypted_secret_shares).or(Err(()))?;
+            let p3_state = p3_state.to_round_two(p3_my_encrypted_secret_shares).or(Err(()))?;
 
             let (p1_group_key, _p1_secret_key) = p1_state.finish(p1.public_key().unwrap())?;
             let (p2_group_key, _p2_secret_key) = p2_state.finish(p2.public_key().unwrap())?;
