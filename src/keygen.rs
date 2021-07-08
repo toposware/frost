@@ -190,7 +190,6 @@ use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::traits::Identity;
 
 use rand::rngs::OsRng;
-use rand::Rng;
 
 use sha2::Digest;
 use sha2::Sha512;
@@ -584,27 +583,9 @@ impl DistributedKeyGeneration<RoundOne> {
             let DH_key = (p.DH_public_key * DH_secret_key).compress().to_bytes();
             let DH_key = GenericArray::from_slice(&DH_key);
 
-/*            let share_bytes = share.polynomial_evaluation.to_bytes();
-            let mut high_block = *Block::from_slice(&share_bytes[..16]);
-            let mut low_block = *Block::from_slice(&share_bytes[16..]);
-
-            let cipher = Aes256::new(&DH_key);
-
-            cipher.encrypt_block(&mut high_block);
-            cipher.encrypt_block(&mut low_block);
-
-            let encrypted_share = EncryptedSecretShare {
-                index: p.index,
-                encrypted_high_block: high_block[..].try_into().unwrap(),
-                encrypted_low_block: low_block[..].try_into().unwrap()
-            };
-*/
             their_encrypted_secret_shares.push(encrypt_share(my_index, &share, DH_key));
 
             their_secret_shares.push(share);
-            
-
-            // println!("Block 1: {:?}", block_high);
         }
 
         let my_secret_share = SecretShare::evaluate_polynomial(my_index, my_coefficients);
@@ -666,7 +647,6 @@ impl DistributedKeyGeneration<RoundOne> {
         // RICE-FROST
 
         let mut complaints: Vec<Complaint> = Vec::new();
-        /*let mut my_encrypted_secret_shares: Vec<EncryptedSecretShare> = Vec::new();*/
         
         if my_encrypted_secret_shares.len() != self.state.parameters.n as usize - 1 {
             return Err(complaints);
@@ -679,35 +659,8 @@ impl DistributedKeyGeneration<RoundOne> {
         for encrypted_share in my_encrypted_secret_shares.iter(){
             for pk in self.state.their_DH_public_keys.iter(){
                 if pk.0 == encrypted_share.sender_index {
-                    // TODO:
-                    // 1) compute decryption key
-                    // 2) decrypt encrypted share
-                    // 3) push decrypted share into my_secret_shares
-
                     let DH_key = (pk.1 * self.state.DH_secret_key).compress().to_bytes();
                     let DH_key = GenericArray::from_slice(&DH_key);
-                    // let share_bytes = share.polynomial_evaluation.to_bytes();
-                    /*let mut high_block = *Block::from_slice(&encrypted_share.encrypted_high_block);
-                    let mut low_block = *Block::from_slice(&encrypted_share.encrypted_low_block);
-
-                    let cipher = Aes256::new(&DH_key);
-
-                    cipher.decrypt_block(&mut high_block);
-                    cipher.decrypt_block(&mut low_block);
-
-                    let mut bytes: [u8; 32] = [0; 32];
-
-                    bytes[0..16].copy_from_slice(&high_block);
-                    bytes[16..32].copy_from_slice(&low_block);
-*/
-
-
-                    /*let encrypted_share = EncryptedSecretShare {
-                        index: p.index,
-                        encrypted_high_block: high_block[..].try_into().unwrap(),
-                        encrypted_low_block: low_block[..].try_into().unwrap()
-                    };
-*/
 
                     // Step 2.2: Each share is verified by calculating:
                     //           g^{f_l(i)} ?= \Prod_{k=0}^{t-1} \phi_{lk}^{i^{k} mod q},
@@ -755,21 +708,7 @@ impl DistributedKeyGeneration<RoundOne> {
         if !complaints.is_empty() {
             return Err(complaints)
         }
-        /*for share in my_secret_shares.iter() {
-            // XXX TODO implement sorting for SecretShare and also for a new Commitment type
-            for (index, commitment) in self.state.their_commitments.iter() {
-                if index == &share.index {
-                    // If the decrypted share is incorrect, P_i builds
-                    // a complaint
-                    match share.verify(commitment){
-                        Err(_) => {
-                            return Err(())
-                        },
-                        Ok(_) => (),
-                    };
-                }
-            }
-        }*/
+
         self.state.my_secret_shares = Some(my_secret_shares);
 
         Ok(DistributedKeyGeneration::<RoundTwo> {
@@ -1085,6 +1024,7 @@ impl GroupKey {
 #[cfg(test)]
 mod test {
     use super::*;
+    use rand::Rng;
 
     use crate::precomputation::generate_commitment_share_lists;
 
