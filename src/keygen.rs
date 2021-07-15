@@ -341,7 +341,7 @@ fn generate_shares(parameters: &Parameters, secret: Scalar, mut rng: OsRng) -> (
 
     // Only one polynomial because dealer, then secret shards are dependent upon index.
     for i in 1..parameters.n + 1 {
-        let secret_share = SecretShare::evaluate_polynomial(&i, &coefficients);
+        let secret_share = SecretShare::evaluate_polynomial(&i, &0, &coefficients);
         let public_key = IndividualPublicKey {
             index: i,
             share: &RISTRETTO_BASEPOINT_TABLE * &secret_share.polynomial_evaluation,
@@ -500,10 +500,10 @@ impl DistributedKeyGeneration<RoundOne> {
 
         // XXX need a way to index their_secret_shares
         for p in other_participants.iter() {
-            their_secret_shares.push(SecretShare::evaluate_polynomial(&p.index, my_coefficients));
+            their_secret_shares.push(SecretShare::evaluate_polynomial(&p.index, my_index, my_coefficients));
         }
 
-        let my_secret_share = SecretShare::evaluate_polynomial(my_index, my_coefficients);
+        let my_secret_share = SecretShare::evaluate_polynomial(my_index, my_index, my_coefficients);
         let state = ActualState {
             parameters: *parameters,
             their_commitments,
@@ -551,7 +551,7 @@ impl DistributedKeyGeneration<RoundOne> {
         for share in my_secret_shares.iter() {
             // XXX TODO implement sorting for SecretShare and also for a new Commitment type
             for (index, commitment) in self.state.their_commitments.iter() {
-                if index == &share.index {
+                if index == &share.sender_index {
                     share.verify(commitment)?;
                 }
             }
@@ -571,7 +571,9 @@ impl DistributedKeyGeneration<RoundOne> {
 #[zeroize(drop)]
 pub struct SecretShare {
     /// The participant index that this secret share was calculated for.
-    pub index: u32,
+    pub receiver_index: u32,
+    /// The participant index that this secret share was calculated by.
+    pub sender_index: u32,
     /// The final evaluation of the polynomial for the participant-respective
     /// indeterminant.
     pub(crate) polynomial_evaluation: Scalar,
@@ -581,7 +583,7 @@ impl SecretShare {
     /// Evaluate the polynomial, `f(x)` for the secret coefficients at the value of `x`.
     //
     // XXX [PAPER] [CFRG] The participant index CANNOT be 0, or the secret share ends up being Scalar::zero().
-    pub(crate) fn evaluate_polynomial(index: &u32, coefficients: &Coefficients) -> SecretShare {
+    pub(crate) fn evaluate_polynomial(index: &u32, sender_index: &u32, coefficients: &Coefficients) -> SecretShare {
         let term: Scalar = (*index).into();
         let mut sum: Scalar = Scalar::zero();
 
@@ -594,14 +596,14 @@ impl SecretShare {
                 sum *= term;
             }
         }
-        SecretShare { index: *index, polynomial_evaluation: sum }
+        SecretShare { receiver_index: *index, sender_index: *sender_index, polynomial_evaluation: sum }
     }
 
     /// Verify that this secret share was correctly computed w.r.t. some secret
     /// polynomial coefficients attested to by some `commitment`.
     pub(crate) fn verify(&self, commitment: &VerifiableSecretSharingCommitment) -> Result<(), ()> {
         let lhs = &RISTRETTO_BASEPOINT_TABLE * &self.polynomial_evaluation;
-        let term: Scalar = self.index.into();
+        let term: Scalar = self.receiver_index.into();
         let mut rhs: RistrettoPoint = RistrettoPoint::identity();
 
         for (index, com) in commitment.0.iter().rev().enumerate() {
@@ -652,7 +654,7 @@ impl DistributedKeyGeneration<RoundTwo> {
 
         key += self.state.my_secret_share.polynomial_evaluation;
 
-        Ok(SecretKey { index: self.state.my_secret_share.index, key })
+        Ok(SecretKey { index: self.state.my_secret_share.receiver_index, key })
     }
 
     /// Calculate the group public key used for verifying threshold signatures.
@@ -861,11 +863,11 @@ mod test {
         let (p2_public_comshares, mut p2_secret_comshares) = generate_commitment_share_lists(&mut OsRng, 2, 1);
 
         let p1_sk = SecretKey {
-            index: participants[0].secret_share.index,
+            index: participants[0].secret_share.receiver_index,
             key: participants[0].secret_share.polynomial_evaluation,
         };
         let p2_sk = SecretKey {
-            index: participants[1].secret_share.index,
+            index: participants[1].secret_share.receiver_index,
             key: participants[1].secret_share.polynomial_evaluation,
         };
 
@@ -908,7 +910,7 @@ mod test {
         }
 
         let coefficients = Coefficients(coeffs);
-        let share = SecretShare::evaluate_polynomial(&1, &coefficients);
+        let share = SecretShare::evaluate_polynomial(&1, &1, &coefficients);
 
         assert!(share.polynomial_evaluation == Scalar::from(5u8));
 
@@ -930,7 +932,7 @@ mod test {
         }
 
         let coefficients = Coefficients(coeffs);
-        let share = SecretShare::evaluate_polynomial(&0, &coefficients);
+        let share = SecretShare::evaluate_polynomial(&0, &0, &coefficients);
 
         assert!(share.polynomial_evaluation == Scalar::one());
 
