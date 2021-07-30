@@ -65,9 +65,9 @@
 //! use frost_dalek::DistributedKeyGeneration;
 //! use frost_dalek::Parameters;
 //! use frost_dalek::Participant;
-//! # use curve25519_dalek::ristretto::RistrettoPoint;
-//! # use curve25519_dalek::traits::Identity;
-//! # use curve25519_dalek::scalar::Scalar;
+//! use curve25519_dalek::ristretto::RistrettoPoint;
+//! use curve25519_dalek::traits::Identity;
+//! use curve25519_dalek::scalar::Scalar;
 //!
 //! # fn do_test() -> Result<(), ()> {
 //! // Set up key shares for a threshold signature scheme which needs at least
@@ -237,7 +237,7 @@ pub struct Participant {
     pub index: u32,
     /// The public key used to derive symmetric keys for encrypting and 
     /// decrypting shares via DH.
-    pub DH_public_key: RistrettoPoint,
+    pub dh_public_key: RistrettoPoint,
     /// A vector of Pedersen commitments to the coefficients of this
     /// participant's private polynomial.
     pub commitments: Vec<RistrettoPoint>,
@@ -283,7 +283,7 @@ impl Participant {
     /// A distributed key generation protocol [`Participant`] and that
     /// participant's secret polynomial `Coefficients` which must be kept
     /// private.
-    pub fn new(parameters: &Parameters, index: u32, DH_public_key: &RistrettoPoint) -> (Self, Coefficients) {
+    pub fn new(parameters: &Parameters, index: u32, dh_public_key: &RistrettoPoint) -> (Self, Coefficients) {
         // Step 1: Every participant P_i samples t random values (a_{i0}, ..., a_{i(t-1)})
         //         uniformly in ZZ_q, and uses these values as coefficients to define a
         //         polynomial f_i(x) = \sum_{j=0}^{t-1} a_{ij} x^{j} of degree t-1 over
@@ -315,7 +315,7 @@ impl Participant {
         let proof: NizkOfSecretKey = NizkOfSecretKey::prove(&index, &coefficients.0[0], &commitments[0], rng);
 
         // Step 4: Every participant P_i broadcasts C_i, \alpha_i to all other participants.
-        (Participant { index, DH_public_key: *DH_public_key, commitments, proof_of_secret_key: proof }, coefficients)
+        (Participant { index, dh_public_key: *dh_public_key, commitments, proof_of_secret_key: proof }, coefficients)
     }
 
     /// Retrieve \\( \alpha_{i0} * B \\), where \\( B \\) is the Ristretto basepoint.
@@ -408,29 +408,25 @@ pub struct DistributedKeyGeneration<S: DkgState> {
 struct ActualState {
     /// The parameters for this instantiation of a threshold signature.
     parameters: Parameters,
-    /// The DH secret key for deriving a symettric key to encrypt and decrypt
+    /// The DH private key for deriving a symmetric key to encrypt and decrypt
     /// secret shares.
-    DH_secret_key: Scalar,
-    /// The DH public key for deriving a symettric key to encrypt and decrypt
+    dh_private_key: Scalar,
+    /// The DH public key for deriving a symmetric key to encrypt and decrypt
     /// secret shares.
-    DH_public_key: RistrettoPoint,
+    dh_public_key: RistrettoPoint,
     /// A vector of tuples containing the index of each participant and that
     /// respective participant's commitments to their private polynomial
     /// coefficients.
     their_commitments: Vec<(u32, VerifiableSecretSharingCommitment)>,
     /// A vector of ECPoints containing the index of each participant and that
     /// respective participant's DH public key.
-    their_DH_public_keys: Vec<(u32, RistrettoPoint)>,
+    their_dh_public_keys: Vec<(u32, RistrettoPoint)>,
     /// A secret share for this participant.
     my_secret_share: SecretShare,
-    /// The secret shares this participant has calculated for all the other participants.
-    their_secret_shares: Option<Vec<SecretShare>>,
     /// The encrypted secret shares this participant has calculated for all the other participants.
     their_encrypted_secret_shares: Option<Vec<EncryptedSecretShare>>,
     /// The secret shares this participant has received from all the other participants.
     my_secret_shares: Option<Vec<SecretShare>>,
-    /// The encrypted secret shares this participant has received from all the other participants.
-    my_encrypted_secret_shares: Option<Vec<EncryptedSecretShare>>,
 }
 
 /// Marker trait to designate valid rounds in the distributed key generation
@@ -473,17 +469,18 @@ fn encrypt_share(my_index: &u32, share: &SecretShare, aes_key: &GenericArray<u8,
     cipher.encrypt_block(&mut high_block);
     cipher.encrypt_block(&mut low_block);
 
+    let encrypted_polynomial_evaluation: [u8; 32] = [high_block, low_block].concat().try_into().unwrap();
+
     EncryptedSecretShare {
         sender_index: *my_index,
         receiver_index: share.index,
-        encrypted_high_block: high_block[..].try_into().unwrap(),
-        encrypted_low_block: low_block[..].try_into().unwrap()
+        encrypted_polynomial_evaluation,
     }
 }
 
 fn decrypt_share(encrypted_share: &EncryptedSecretShare, aes_key: &GenericArray<u8, U32>) -> Result<SecretShare, ()> {
-    let mut high_block = *Block::from_slice(&encrypted_share.encrypted_high_block);
-    let mut low_block = *Block::from_slice(&encrypted_share.encrypted_low_block);
+    let mut high_block = *Block::from_slice(&encrypted_share.encrypted_polynomial_evaluation[..16]);
+    let mut low_block = *Block::from_slice(&encrypted_share.encrypted_polynomial_evaluation[16..]);
 
     let cipher = Aes256::new(&aes_key);
 
@@ -524,15 +521,15 @@ impl DistributedKeyGeneration<RoundOne> {
     /// vector of participants whose zero-knowledge proofs were incorrect.
     pub fn new(
         parameters: &Parameters,
-        DH_secret_key: &Scalar,
-        DH_public_key: &RistrettoPoint,
+        dh_private_key: &Scalar,
+        dh_public_key: &RistrettoPoint,
         my_index: &u32,
         my_coefficients: &Coefficients,
         other_participants: &mut Vec<Participant>,
     ) -> Result<Self, Vec<u32>>
     {
         let mut their_commitments: Vec<(u32, VerifiableSecretSharingCommitment)> = Vec::with_capacity(parameters.t as usize);
-        let mut their_DH_public_keys: Vec<(u32, RistrettoPoint)> = Vec::with_capacity(parameters.t as usize);
+        let mut their_dh_public_keys: Vec<(u32, RistrettoPoint)> = Vec::with_capacity(parameters.t as usize);
         let mut misbehaving_participants: Vec<u32> = Vec::new();
 
         // Bail if we didn't get enough participants.
@@ -555,7 +552,7 @@ impl DistributedKeyGeneration<RoundOne> {
             match p.proof_of_secret_key.verify(&p.index, &public_key) {
                 Ok(_)  => {
                             their_commitments.push((p.index, VerifiableSecretSharingCommitment(p.commitments.clone())));
-                            their_DH_public_keys.push((p.index, p.DH_public_key));
+                            their_dh_public_keys.push((p.index, p.dh_public_key));
                           },
                 Err(_) => misbehaving_participants.push(p.index),
             }
@@ -573,33 +570,28 @@ impl DistributedKeyGeneration<RoundOne> {
         // Round 2
         // Step 1: Each P_i securely sends to each other participant P_l a secret share
         //         (l, f_i(l)) and keeps (i, f_i(i)) for themselves.
-        let mut their_secret_shares: Vec<SecretShare> = Vec::with_capacity(parameters.n as usize - 1);
         let mut their_encrypted_secret_shares: Vec<EncryptedSecretShare> = Vec::with_capacity(parameters.n as usize - 1);
 
-        // XXX need a way to index their_secret_shares
+        // XXX need a way to index their_encrypted_secret_shares
         for p in other_participants.iter() {
             let share = SecretShare::evaluate_polynomial(&p.index, my_coefficients);
 
-            let DH_key = (p.DH_public_key * DH_secret_key).compress().to_bytes();
+            let DH_key = (p.dh_public_key * dh_private_key).compress().to_bytes();
             let DH_key = GenericArray::from_slice(&DH_key);
 
             their_encrypted_secret_shares.push(encrypt_share(my_index, &share, DH_key));
-
-            their_secret_shares.push(share);
         }
 
         let my_secret_share = SecretShare::evaluate_polynomial(my_index, my_coefficients);
         let state = ActualState {
             parameters: *parameters,
-            DH_secret_key: *DH_secret_key,
-            DH_public_key: *DH_public_key,
+            dh_private_key: *dh_private_key,
+            dh_public_key: *dh_public_key,
             their_commitments,
-            their_DH_public_keys,
+            their_dh_public_keys,
             my_secret_share,
-            their_secret_shares: Some(their_secret_shares),
             their_encrypted_secret_shares: Some(their_encrypted_secret_shares),
             my_secret_shares: None,
-            my_encrypted_secret_shares: None,
         };
 
         Ok(DistributedKeyGeneration::<RoundOne> {
@@ -608,20 +600,14 @@ impl DistributedKeyGeneration<RoundOne> {
         })
     }
 
-    /// Retrieve a secret share for each other participant, to be given to them
-    /// at the end of `DistributedKeyGeneration::<RoundOne>`.
-    pub fn their_secret_shares(&self) -> Result<&Vec<SecretShare>, ()> {
-        self.state.their_secret_shares.as_ref().ok_or(())
-    }
-
     /// Retrieve an encrypted secret share for each other participant, to be given to them
     /// at the end of `DistributedKeyGeneration::<RoundOne>`.
     pub fn their_encrypted_secret_shares(&self) -> Result<&Vec<EncryptedSecretShare>, ()> {
         self.state.their_encrypted_secret_shares.as_ref().ok_or(())
     }
 
-    /// Progress to round two of the DKG protocol once we have sent each share
-    /// from `DistributedKeyGeneration::<RoundOne>.their_secret_shares()` to its
+    /// Progress to round two of the DKG protocol once we have sent each encrypted share
+    /// from `DistributedKeyGeneration::<RoundOne>.their_encrypted_secret_shares()` to its
     /// respective other participant, and collected our shares from the other
     /// participants in turn.
     #[allow(clippy::wrong_self_convention)]
@@ -630,13 +616,6 @@ impl DistributedKeyGeneration<RoundOne> {
         my_encrypted_secret_shares: Vec<EncryptedSecretShare>,
     ) -> Result<DistributedKeyGeneration<RoundTwo>, Vec<Complaint>>
     {
-        // Zero out the other participants secret shares from memory.
-        if self.state.their_secret_shares.is_some() {
-            self.state.their_secret_shares.unwrap().zeroize();
-            // XXX Does setting this to None always call drop()?
-            self.state.their_secret_shares = None;
-        }
-
         // Zero out the other participants encrypted secret shares from memory.
         if self.state.their_encrypted_secret_shares.is_some() {
             self.state.their_encrypted_secret_shares.unwrap().zeroize();
@@ -657,9 +636,9 @@ impl DistributedKeyGeneration<RoundOne> {
         // Step 2.1: Each P_i decrypts their shares with
         //           key k_il = pk_l^sk_i
         for encrypted_share in my_encrypted_secret_shares.iter(){
-            for pk in self.state.their_DH_public_keys.iter(){
+            for pk in self.state.their_dh_public_keys.iter(){
                 if pk.0 == encrypted_share.sender_index {
-                    let DH_key = (pk.1 * self.state.DH_secret_key).compress().to_bytes();
+                    let DH_key = (pk.1 * self.state.dh_private_key).compress().to_bytes();
                     let DH_key = GenericArray::from_slice(&DH_key);
 
                     // Step 2.2: Each share is verified by calculating:
@@ -679,29 +658,32 @@ impl DistributedKeyGeneration<RoundOne> {
                                 let r = Scalar::random(&mut rng);
 
                                 let mut h = Sha512::new();
-                                h.update(self.state.DH_public_key.compress().to_bytes());
+                                h.update(self.state.dh_public_key.compress().to_bytes());
                                 h.update(pk.1.compress().to_bytes());
                                 h.update(DH_key);
 
                                 let h = Scalar::from_hash(h);
 
-                                complaints.push(Complaint { maker_index: encrypted_share.receiver_index,
-                                                            accused_index: pk.0,
-                                                            DH_key: *DH_key,
-                                                            proof: ComplaintProof { a1: &RISTRETTO_BASEPOINT_TABLE * &r,
-                                                                                    a2: pk.1 * r,
-                                                                                    z: r + h * self.state.DH_secret_key, }
-                                                          });
-
+                                complaints.push(
+                                    Complaint {
+                                        maker_index: encrypted_share.receiver_index,
+                                        accused_index: pk.0,
+                                        DH_key: *DH_key,
+                                        proof: ComplaintProof {
+                                            a1: &RISTRETTO_BASEPOINT_TABLE * &r,
+                                            a2: pk.1 * r,
+                                            z: r + h * self.state.dh_private_key,
+                                        }
+                                    }
+                                );
                                 break;
-                            }    
-                                
+                            }
                         }
                     }
-
-                    if decrypted_share.is_ok() { my_secret_shares.push(decrypted_share.unwrap()); }
+                    if let Ok(share) = decrypted_share {
+                        my_secret_shares.push(share);
+                    }
                 }
-                
             }
         }
 
@@ -782,9 +764,7 @@ pub struct EncryptedSecretShare {
     /// The participant index that this secret share was calculated for.
     pub receiver_index: u32,
     /// The encrypted polynomial evaluation.
-    /// TODO: figure out the right type!
-    pub(crate) encrypted_high_block: [u8; 16],
-    pub(crate) encrypted_low_block: [u8; 16],
+    pub(crate) encrypted_polynomial_evaluation: [u8; 32],
 }
 
 /// A proof that a generated complaint is valid. 
@@ -827,38 +807,15 @@ impl Complaint {
 
         let h = Scalar::from_hash(h);
 
-        if &self.proof.a1 + pk_i * h != &RISTRETTO_BASEPOINT_TABLE * &self.proof.z { return Err(()) }
+        if self.proof.a1 + pk_i * h != &RISTRETTO_BASEPOINT_TABLE * &self.proof.z { return Err(()) }
 
         if let Some(key_as_point) = CompressedRistretto::from_slice(&self.DH_key).decompress() {
-            if &self.proof.a2 + key_as_point * h != pk_l * &self.proof.z { return Err(()) }
+            if self.proof.a2 + key_as_point * h != pk_l * self.proof.z { return Err(()) }
         } else {
             return Err(())
         }
 
         Ok(())
-    }
-}
-
-/// Every participant can verify a complaint and determine who is the malicious
-/// party. The relevant encrypted share is assumed to exist and publicly retrievable
-/// by any participant.
-/// TODO: What if the indexes in the complaint are wrong?
-fn blame(encrypted_share: &EncryptedSecretShare,
-         commitment: &VerifiableSecretSharingCommitment, 
-         complaint: &Complaint, 
-         pk_i: &RistrettoPoint, 
-         pk_l: &RistrettoPoint
-) -> u32 {
-
-    if complaint.verify(pk_i, pk_l).is_err() { return complaint.maker_index }
-
-    let share = decrypt_share(encrypted_share, &complaint.DH_key);
-
-    if share.is_err() { return complaint.accused_index }
-
-    match share.unwrap().verify(commitment) {
-        Ok(()) => return complaint.accused_index,
-        Err(()) => return complaint.maker_index,
     }
 }
 
@@ -915,6 +872,58 @@ impl DistributedKeyGeneration<RoundTwo> {
         keys.push(*my_commitment);
 
         Ok(GroupKey(keys.iter().sum()))
+    }
+
+
+    /// Every participant can verify a complaint and determine who is the malicious
+    /// party. The relevant encrypted share is assumed to exist and publicly retrievable
+    /// by any participant.
+    pub fn blame(
+        &self,
+        encrypted_share: &EncryptedSecretShare,
+        complaint: &Complaint,
+    ) -> u32 {
+        let mut pk_maker = RistrettoPoint::identity();
+        let mut pk_accused = RistrettoPoint::identity();
+        let mut commitment_accused = VerifiableSecretSharingCommitment(Vec::new());
+
+        for (index, commitment) in self.state.their_commitments.iter() {
+            if index == &complaint.accused_index {
+                commitment_accused = commitment.clone();
+            }
+        }
+
+        if commitment_accused.0.is_empty() {
+            return complaint.maker_index;
+        }
+
+        for (index, pk) in self.state.their_dh_public_keys.iter() {
+            if index == &complaint.maker_index {
+                pk_maker = *pk;
+            }
+
+            else if index == &complaint.accused_index {
+                pk_accused = *pk;
+            }
+        };
+
+        if pk_maker == RistrettoPoint::identity() || pk_accused == RistrettoPoint::identity() {
+            return complaint.maker_index
+        }
+
+        if complaint.verify(&pk_maker, &pk_accused).is_err() {
+            return complaint.maker_index
+        }
+
+        let share = decrypt_share(encrypted_share, &complaint.DH_key);
+        if share.is_err() {
+            return complaint.accused_index
+        }
+
+        match share.unwrap().verify(&commitment_accused) {
+            Ok(()) => complaint.accused_index,
+            Err(()) => complaint.maker_index,
+        }
     }
 }
 
@@ -1534,11 +1543,9 @@ mod test {
                                                                       &mut p3_other_participants).or(Err(()))?;
             let p3_their_encrypted_secret_shares = p3_state.their_encrypted_secret_shares()?;
 
-            let wrong_encrypted_secret_share = EncryptedSecretShare { sender_index: 1,
-                                                             receiver_index: 2,
-                                                             encrypted_high_block: [0; 16],
-                                                             encrypted_low_block: [1; 16]
-            };
+            let wrong_encrypted_secret_share = EncryptedSecretShare {sender_index: 1,
+                                                                     receiver_index: 2,
+                                                                     encrypted_polynomial_evaluation: [0; 32]};
 
             let p1_my_encrypted_secret_shares = vec!(p2_their_encrypted_secret_shares[0].clone(), // XXX FIXME indexing
                                            p3_their_encrypted_secret_shares[0].clone());
@@ -1557,7 +1564,7 @@ mod test {
             let complaints = complaints.unwrap_err();
             assert!(complaints.len() == 1);
 
-            let bad_index = blame(&wrong_encrypted_secret_share, &p3_state.state.their_commitments[0].1, &complaints[0], &dh_pk2, &dh_pk1);
+            let bad_index = p3_state.blame(&wrong_encrypted_secret_share, &complaints[0]);
             assert!(bad_index == 1);
 
             let (p1_group_key, _p1_secret_key) = p1_state.finish(p1.public_key().unwrap())?;
