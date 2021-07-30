@@ -983,9 +983,9 @@ mod test {
             let p2_state = p2_state.to_round_two(p2_my_encrypted_secret_shares).or(Err(()))?;
             let p3_state = p3_state.to_round_two(p3_my_encrypted_secret_shares).or(Err(()))?;
 
-            let (p1_group_key, p1_secret_key) = p1_state.finish(p1.public_key().unwrap())?;
-            let (p2_group_key, p2_secret_key) = p2_state.finish(p2.public_key().unwrap())?;
-            let (p3_group_key, p3_secret_key) = p3_state.finish(p3.public_key().unwrap())?;
+            let (p1_group_key, p1_secret_key) = p1_state.finish(p1.public_key().unwrap()).or(Err(()))?;
+            let (p2_group_key, p2_secret_key) = p2_state.finish(p2.public_key().unwrap()).or(Err(()))?;
+            let (p3_group_key, p3_secret_key) = p3_state.finish(p3.public_key().unwrap()).or(Err(()))?;
 
             assert!(p1_group_key.0.compress() == p2_group_key.0.compress());
             assert!(p2_group_key.0.compress() == p3_group_key.0.compress());

@@ -95,7 +95,7 @@
 //! # let (bob, bob_coefficients) = Participant::new(&params, 2, &RistrettoPoint::identity());
 //! # let (carol, carol_coefficients) = Participant::new(&params, 3, &RistrettoPoint::identity());
 //! #
-//! alice.proof_of_secret_key.verify(&alice.index, &alice.public_key().unwrap())?;
+//! alice.proof_of_secret_key.verify(&alice.index, &alice.public_key().unwrap()).or(Err(()))?;
 //! # Ok(()) } fn main() { assert!(do_test().is_ok()); }
 //! ```
 //!
@@ -114,7 +114,7 @@
 //! # let (bob, bob_coefficients) = Participant::new(&params, 2, &RistrettoPoint::identity());
 //! # let (carol, carol_coefficients) = Participant::new(&params, 3, &RistrettoPoint::identity());
 //! #
-//! bob.proof_of_secret_key.verify(&bob.index, &bob.public_key().unwrap())?;
+//! bob.proof_of_secret_key.verify(&bob.index, &bob.public_key().unwrap()).or(Err(()))?;
 //! # Ok(()) } fn main() { assert!(do_test().is_ok()); }
 //! ```
 //!
@@ -133,7 +133,7 @@
 //! # let (bob, bob_coefficients) = Participant::new(&params, 2, &RistrettoPoint::identity());
 //! # let (carol, carol_coefficients) = Participant::new(&params, 3, &RistrettoPoint::identity());
 //! #
-//! carol.proof_of_secret_key.verify(&carol.index, &carol.public_key().unwrap())?;
+//! carol.proof_of_secret_key.verify(&carol.index, &carol.public_key().unwrap()).or(Err(()))?;
 //! # Ok(()) } fn main() { assert!(do_test().is_ok()); }
 //! ```
 //!
@@ -394,9 +394,9 @@
 //! # let bob_state = bob_state.to_round_two(bob_my_encrypted_secret_shares).or(Err(()))?;
 //! # let carol_state = carol_state.to_round_two(carol_my_encrypted_secret_shares).or(Err(()))?;
 //! #
-//! let (alice_group_key, alice_secret_key) = alice_state.finish(alice.public_key().unwrap())?;
-//! let (bob_group_key, bob_secret_key) = bob_state.finish(bob.public_key().unwrap())?;
-//! let (carol_group_key, carol_secret_key) = carol_state.finish(carol.public_key().unwrap())?;
+//! let (alice_group_key, alice_secret_key) = alice_state.finish(alice.public_key().unwrap()).or(Err(()))?;
+//! let (bob_group_key, bob_secret_key) = bob_state.finish(bob.public_key().unwrap()).or(Err(()))?;
+//! let (carol_group_key, carol_secret_key) = carol_state.finish(carol.public_key().unwrap()).or(Err(()))?;
 //!
 //! assert!(alice_group_key == bob_group_key);
 //! assert!(carol_group_key == bob_group_key);
@@ -459,9 +459,9 @@
 //! # let bob_state = bob_state.to_round_two(bob_my_encrypted_secret_shares).or(Err(()))?;
 //! # let carol_state = carol_state.to_round_two(carol_my_encrypted_secret_shares).or(Err(()))?;
 //! #
-//! # let (alice_group_key, alice_secret_key) = alice_state.finish(alice.public_key().unwrap())?;
-//! # let (bob_group_key, bob_secret_key) = bob_state.finish(bob.public_key().unwrap())?;
-//! # let (carol_group_key, carol_secret_key) = carol_state.finish(carol.public_key().unwrap())?;
+//! # let (alice_group_key, alice_secret_key) = alice_state.finish(alice.public_key().unwrap()).or(Err(()))?;
+//! # let (bob_group_key, bob_secret_key) = bob_state.finish(bob.public_key().unwrap()).or(Err(()))?;
+//! # let (carol_group_key, carol_secret_key) = carol_state.finish(carol.public_key().unwrap()).or(Err(()))?;
 //! #
 //! # let alice_public_key = alice_secret_key.to_public();
 //! # let bob_public_key = bob_secret_key.to_public();
@@ -534,9 +534,9 @@
 //! # let bob_state = bob_state.to_round_two(bob_my_encrypted_secret_shares).or(Err(()))?;
 //! # let carol_state = carol_state.to_round_two(carol_my_encrypted_secret_shares).or(Err(()))?;
 //! #
-//! # let (alice_group_key, alice_secret_key) = alice_state.finish(alice.public_key().unwrap())?;
-//! # let (bob_group_key, bob_secret_key) = bob_state.finish(bob.public_key().unwrap())?;
-//! # let (carol_group_key, carol_secret_key) = carol_state.finish(carol.public_key().unwrap())?;
+//! # let (alice_group_key, alice_secret_key) = alice_state.finish(alice.public_key().unwrap()).or(Err(()))?;
+//! # let (bob_group_key, bob_secret_key) = bob_state.finish(bob.public_key().unwrap()).or(Err(()))?;
+//! # let (carol_group_key, carol_secret_key) = carol_state.finish(carol.public_key().unwrap()).or(Err(()))?;
 //! #
 //! # let alice_public_key = alice_secret_key.to_public();
 //! # let bob_public_key = bob_secret_key.to_public();
