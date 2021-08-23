@@ -32,9 +32,7 @@ use frost_dalek::precomputation::{
 };
 use frost_dalek::SignatureAggregator;
 
-use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
-use curve25519_dalek::traits::Identity;
 
 const NUMBER_OF_PARTICIPANTS: u32 = 5;
 const THRESHOLD_OF_PARTICIPANTS: u32 = 3;
@@ -44,24 +42,23 @@ mod dkg_benches {
 
     fn participant_new(c: &mut Criterion) {
         let params = Parameters { n: NUMBER_OF_PARTICIPANTS, t: THRESHOLD_OF_PARTICIPANTS };
-        c.bench_function("Participant creation", move |b| b.iter(|| Participant::new(&params, 1, &RistrettoPoint::identity())));
+        c.bench_function("Participant creation", move |b| b.iter(|| Participant::new(&params, 1)));
     }
 
     fn round_one_t_out_of_n(c: &mut Criterion) {
         let params = Parameters { n: NUMBER_OF_PARTICIPANTS, t: THRESHOLD_OF_PARTICIPANTS };
 
         let mut participants_except_p1 = Vec::<Participant>::with_capacity((NUMBER_OF_PARTICIPANTS - 1) as usize);
-        let (p1, coefficient) = Participant::new(&params, 1, &RistrettoPoint::identity());
+        let (p1, coefficient, p1_dh_sk) = Participant::new(&params, 1);
 
         for i in 2..NUMBER_OF_PARTICIPANTS+1 {
-            let (p,_) = Participant::new(&params, i, &RistrettoPoint::identity());
+            let (p, _, _) = Participant::new(&params, i);
             participants_except_p1.push(p);
         }
 
         c.bench_function("Round One", move |b| {
             b.iter(|| DistributedKeyGeneration::<_>::new(&params,
-                                                         &Scalar::one(),
-                                                         &RistrettoPoint::identity(),
+                                                         &p1_dh_sk,
                                                          &p1.index,
                                                          &coefficient,
                                                          &mut participants_except_p1));
@@ -73,11 +70,13 @@ mod dkg_benches {
 
         let mut participants = Vec::<Participant>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
         let mut coefficients = Vec::<Coefficients>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
+        let mut dh_secret_keys = Vec::<Scalar>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
 
         for i in 1..NUMBER_OF_PARTICIPANTS+1 {
-            let (p,c) = Participant::new(&params, i, &RistrettoPoint::identity());
+            let (p, c, dh_sk) = Participant::new(&params, i);
             participants.push(p);
             coefficients.push(c);
+            dh_secret_keys.push(dh_sk);
         }
 
         let mut p1_my_encrypted_secret_shares = Vec::<EncryptedSecretShare>::with_capacity((NUMBER_OF_PARTICIPANTS - 1) as usize);
@@ -85,8 +84,7 @@ mod dkg_benches {
         let mut participants_except_p1: Vec::<Participant> = participants.clone();
         participants_except_p1.remove(0);
         let p1_state = DistributedKeyGeneration::<_>::new(&params,
-                                                          &Scalar::one(),
-                                                          &RistrettoPoint::identity(),
+                                                          &dh_secret_keys[0],
                                                           &participants[0].index,
                                                           &coefficients[0],
                                                           &mut participants_except_p1).unwrap();
@@ -95,8 +93,7 @@ mod dkg_benches {
             let mut participants_except_pi: Vec::<Participant> = participants.clone();
             participants_except_pi.remove((i-1) as usize);
             let pi_state = DistributedKeyGeneration::<_>::new(&params,
-                                                              &Scalar::one(),
-                                                              &RistrettoPoint::identity(),
+                                                              &dh_secret_keys[(i-1) as usize],
                                                               &participants[(i-1) as usize].index,
                                                               &coefficients[(i-1) as usize],
                                                               &mut participants_except_pi).unwrap();
@@ -114,11 +111,13 @@ mod dkg_benches {
 
         let mut participants = Vec::<Participant>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
         let mut coefficients = Vec::<Coefficients>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
+        let mut dh_secret_keys = Vec::<Scalar>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
 
         for i in 1..NUMBER_OF_PARTICIPANTS+1 {
-            let (p,c) = Participant::new(&params, i, &RistrettoPoint::identity());
+            let (p, c, dh_sk) = Participant::new(&params, i);
             participants.push(p);
             coefficients.push(c);
+            dh_secret_keys.push(dh_sk);
         }
 
         let mut p1_my_encrypted_secret_shares = Vec::<EncryptedSecretShare>::with_capacity((NUMBER_OF_PARTICIPANTS - 1) as usize);
@@ -126,8 +125,7 @@ mod dkg_benches {
         let mut participants_except_p1: Vec::<Participant> = participants.clone();
         participants_except_p1.remove(0);
         let p1_state = DistributedKeyGeneration::<_>::new(&params,
-                                                          &Scalar::one(),
-                                                          &RistrettoPoint::identity(),
+                                                          &dh_secret_keys[0],
                                                           &participants[0].index,
                                                           &coefficients[0],
                                                           &mut participants_except_p1).unwrap();
@@ -136,8 +134,7 @@ mod dkg_benches {
             let mut participants_except_pi: Vec::<Participant> = participants.clone();
             participants_except_pi.remove((i-1) as usize);
             let pi_state = DistributedKeyGeneration::<_>::new(&params,
-                                                              &Scalar::one(),
-                                                              &RistrettoPoint::identity(),
+                                                              &dh_secret_keys[(i-1) as usize],
                                                               &participants[(i-1) as usize].index,
                                                               &coefficients[(i-1) as usize],
                                                               &mut participants_except_pi).unwrap();
@@ -173,11 +170,13 @@ mod sign_benches {
 
         let mut participants = Vec::<Participant>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
         let mut coefficients = Vec::<Coefficients>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
+        let mut dh_secret_keys = Vec::<Scalar>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
 
         for i in 1..NUMBER_OF_PARTICIPANTS+1 {
-            let (p,c) = Participant::new(&params, i, &RistrettoPoint::identity());
+            let (p, c, dh_sk) = Participant::new(&params, i);
             participants.push(p);
             coefficients.push(c);
+            dh_secret_keys.push(dh_sk);
         }
 
         let mut participants_encrypted_secret_shares: Vec<Vec::<EncryptedSecretShare>> = 
@@ -190,8 +189,7 @@ mod sign_benches {
             let mut participants_except_pi: Vec::<Participant> = participants.clone();
             participants_except_pi.remove((i-1) as usize);
             let pi_state = DistributedKeyGeneration::<_>::new(&params,
-                                                              &Scalar::one(),
-                                                              &RistrettoPoint::identity(),
+                                                              &dh_secret_keys[(i-1) as usize],
                                                               &participants[(i-1) as usize].index,
                                                               &coefficients[(i-1) as usize],
                                                               &mut participants_except_pi).unwrap();
@@ -263,11 +261,13 @@ mod sign_benches {
 
         let mut participants = Vec::<Participant>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
         let mut coefficients = Vec::<Coefficients>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
+        let mut dh_secret_keys = Vec::<Scalar>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
 
         for i in 1..NUMBER_OF_PARTICIPANTS+1 {
-            let (p,c) = Participant::new(&params, i, &RistrettoPoint::identity());
+            let (p, c, dh_sk) = Participant::new(&params, i);
             participants.push(p);
             coefficients.push(c);
+            dh_secret_keys.push(dh_sk);
         }
 
         let mut participants_encrypted_secret_shares: Vec<Vec::<EncryptedSecretShare>> = 
@@ -280,8 +280,7 @@ mod sign_benches {
             let mut participants_except_pi: Vec::<Participant> = participants.clone();
             participants_except_pi.remove((i-1) as usize);
             let pi_state = DistributedKeyGeneration::<_>::new(&params,
-                                                              &Scalar::one(),
-                                                              &RistrettoPoint::identity(),
+                                                              &dh_secret_keys[(i-1) as usize],
                                                               &participants[(i-1) as usize].index,
                                                               &coefficients[(i-1) as usize],
                                                               &mut participants_except_pi).unwrap();
@@ -363,11 +362,13 @@ mod sign_benches {
 
         let mut participants = Vec::<Participant>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
         let mut coefficients = Vec::<Coefficients>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
+        let mut dh_secret_keys = Vec::<Scalar>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
 
         for i in 1..NUMBER_OF_PARTICIPANTS+1 {
-            let (p,c) = Participant::new(&params, i, &RistrettoPoint::identity());
+            let (p, c, dh_sk) = Participant::new(&params, i);
             participants.push(p);
             coefficients.push(c);
+            dh_secret_keys.push(dh_sk);
         }
 
         let mut participants_encrypted_secret_shares: Vec<Vec::<EncryptedSecretShare>> = 
@@ -380,8 +381,7 @@ mod sign_benches {
             let mut participants_except_pi: Vec::<Participant> = participants.clone();
             participants_except_pi.remove((i-1) as usize);
             let pi_state = DistributedKeyGeneration::<_>::new(&params,
-                                                              &Scalar::one(),
-                                                              &RistrettoPoint::identity(),
+                                                              &dh_secret_keys[(i-1) as usize],
                                                               &participants[(i-1) as usize].index,
                                                               &coefficients[(i-1) as usize],
                                                               &mut participants_except_pi).unwrap();
