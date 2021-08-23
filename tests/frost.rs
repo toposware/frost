@@ -26,18 +26,19 @@ use frost_dalek::SignatureAggregator;
 fn signing_and_verification_3_out_of_5() {
     let params = Parameters { n: 5, t: 3 };
 
-    let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, 1);
-    let (p2, p2coeffs, p2_dh_sk) = Participant::new(&params, 2);
-    let (p3, p3coeffs, p3_dh_sk) = Participant::new(&params, 3);
-    let (p4, p4coeffs, p4_dh_sk) = Participant::new(&params, 4);
-    let (p5, p5coeffs, p5_dh_sk) = Participant::new(&params, 5);
+    let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, 1, "Φ");
+    let (p2, p2coeffs, p2_dh_sk) = Participant::new(&params, 2, "Φ");
+    let (p3, p3coeffs, p3_dh_sk) = Participant::new(&params, 3, "Φ");
+    let (p4, p4coeffs, p4_dh_sk) = Participant::new(&params, 4, "Φ");
+    let (p5, p5coeffs, p5_dh_sk) = Participant::new(&params, 5, "Φ");
 
     let mut p1_other_participants: Vec<Participant> = vec!(p2.clone(), p3.clone(), p4.clone(), p5.clone());
     let p1_state = DistributedKeyGeneration::<_>::new(&params,
                                                       &p1_dh_sk,
                                                       &p1.index,
                                                       &p1coeffs,
-                                                      &mut p1_other_participants).unwrap();
+                                                      &mut p1_other_participants,
+                                                      "Φ").unwrap();
     let p1_their_encrypted_secret_shares = p1_state.their_encrypted_secret_shares().unwrap();
 
     let mut p2_other_participants: Vec<Participant> = vec!(p1.clone(), p3.clone(), p4.clone(), p5.clone());
@@ -45,7 +46,8 @@ fn signing_and_verification_3_out_of_5() {
                                                      &p2_dh_sk,
                                                      &p2.index,
                                                      &p2coeffs,
-                                                     &mut p2_other_participants).unwrap();
+                                                     &mut p2_other_participants,
+                                                     "Φ").unwrap();
     let p2_their_encrypted_secret_shares = p2_state.their_encrypted_secret_shares().unwrap();
 
     let mut p3_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p4.clone(), p5.clone());
@@ -53,7 +55,8 @@ fn signing_and_verification_3_out_of_5() {
                                                       &p3_dh_sk,
                                                       &p3.index,
                                                       &p3coeffs,
-                                                      &mut p3_other_participants).unwrap();
+                                                      &mut p3_other_participants,
+                                                      "Φ").unwrap();
     let p3_their_encrypted_secret_shares = p3_state.their_encrypted_secret_shares().unwrap();
 
     let mut p4_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p3.clone(), p5.clone());
@@ -61,7 +64,8 @@ fn signing_and_verification_3_out_of_5() {
                                                       &p4_dh_sk,
                                                       &p4.index,
                                                       &p4coeffs,
-                                                      &mut p4_other_participants).unwrap();
+                                                      &mut p4_other_participants,
+                                                      "Φ").unwrap();
     let p4_their_encrypted_secret_shares = p4_state.their_encrypted_secret_shares().unwrap();
 
     let mut p5_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p3.clone(), p4.clone());
@@ -69,7 +73,8 @@ fn signing_and_verification_3_out_of_5() {
                                                       &p5_dh_sk,
                                                       &p5.index,
                                                       &p5coeffs,
-                                                      &mut p5_other_participants).unwrap();
+                                                      &mut p5_other_participants,
+                                                      "Φ").unwrap();
     let p5_their_encrypted_secret_shares = p5_state.their_encrypted_secret_shares().unwrap();
 
     let p1_my_encrypted_secret_shares = vec!(p2_their_encrypted_secret_shares[0].clone(), // XXX FIXME indexing
@@ -144,16 +149,17 @@ fn signing_and_verification_3_out_of_5() {
 fn signing_and_verification_with_ed25519_dalek_2_out_of_3() {
     let params = Parameters { n: 3, t: 2 };
 
-    let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, 1);
-    let (p2, p2coeffs, p2_dh_sk) = Participant::new(&params, 2);
-    let (p3, p3coeffs, p3_dh_sk) = Participant::new(&params, 3);
+    let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, 1, "Φ");
+    let (p2, p2coeffs, p2_dh_sk) = Participant::new(&params, 2, "Φ");
+    let (p3, p3coeffs, p3_dh_sk) = Participant::new(&params, 3, "Φ");
 
     let mut p1_other_participants: Vec<Participant> = vec!(p2.clone(), p3.clone());
     let p1_state = DistributedKeyGeneration::<_>::new(&params,
                                                       &p1_dh_sk,
                                                       &p1.index,
                                                       &p1coeffs,
-                                                      &mut p1_other_participants).unwrap();
+                                                      &mut p1_other_participants,
+                                                      "Φ").unwrap();
     let p1_their_encrypted_secret_shares = p1_state.their_encrypted_secret_shares().unwrap();
 
     let mut p2_other_participants: Vec<Participant> = vec!(p1.clone(), p3.clone());
@@ -161,7 +167,8 @@ fn signing_and_verification_with_ed25519_dalek_2_out_of_3() {
                                                      &p2_dh_sk,
                                                      &p2.index,
                                                      &p2coeffs,
-                                                     &mut p2_other_participants).unwrap();
+                                                     &mut p2_other_participants,
+                                                     "Φ").unwrap();
     let p2_their_encrypted_secret_shares = p2_state.their_encrypted_secret_shares().unwrap();
 
     let mut p3_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone());
@@ -169,7 +176,8 @@ fn signing_and_verification_with_ed25519_dalek_2_out_of_3() {
                                                       &p3_dh_sk,
                                                       &p3.index,
                                                       &p3coeffs,
-                                                      &mut p3_other_participants).unwrap();
+                                                      &mut p3_other_participants,
+                                                      "Φ").unwrap();
     let p3_their_encrypted_secret_shares = p3_state.their_encrypted_secret_shares().unwrap();
 
     let p1_my_encrypted_secret_shares = vec!(p2_their_encrypted_secret_shares[0].clone(), // XXX FIXME indexing

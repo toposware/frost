@@ -668,16 +668,17 @@ mod test {
     fn signing_and_verification_single_party() {
         let params = Parameters { n: 1, t: 1 };
 
-        let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, 1);
+        let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, 1, "Φ");
 
-        p1.proof_of_secret_key.verify(&p1.index, &p1.commitments[0]).unwrap();
+        p1.proof_of_secret_key.verify(&p1.index, &p1.commitments[0], "Φ").unwrap();
 
         let mut p1_other_participants: Vec<Participant> = Vec::new();
         let p1_state = DistributedKeyGeneration::<RoundOne>::new(&params,
                                                                  &p1_dh_sk,
                                                                  &p1.index,
                                                                  &p1coeffs,
-                                                                 &mut p1_other_participants).unwrap();
+                                                                 &mut p1_other_participants,
+                                                                 "Φ").unwrap();
         let p1_my_encrypted_secret_shares = Vec::new();
         let p1_state = p1_state.to_round_two(p1_my_encrypted_secret_shares).unwrap();
         let result = p1_state.finish(p1.public_key().unwrap());
@@ -718,14 +719,15 @@ mod test {
     fn signing_and_verification_1_out_of_1() {
         let params = Parameters { n: 1, t: 1 };
 
-        let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, 1);
+        let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, 1, "Φ");
 
         let mut p1_other_participants: Vec<Participant> = Vec::with_capacity(0);
         let p1_state = DistributedKeyGeneration::<RoundOne>::new(&params,
                                                                  &p1_dh_sk,
                                                                  &p1.index,
                                                                  &p1coeffs,
-                                                                 &mut p1_other_participants).unwrap();
+                                                                 &mut p1_other_participants,
+                                                                 "Φ").unwrap();
         let p1_my_encrypted_secret_shares = Vec::with_capacity(0);
         let p1_state = p1_state.to_round_two(p1_my_encrypted_secret_shares).unwrap();
 
@@ -757,15 +759,16 @@ mod test {
     fn signing_and_verification_1_out_of_2() {
         let params = Parameters { n: 2, t: 1 };
 
-        let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, 1);
-        let (p2, p2coeffs, p2_dh_sk) = Participant::new(&params, 2);
+        let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, 1, "Φ");
+        let (p2, p2coeffs, p2_dh_sk) = Participant::new(&params, 2, "Φ");
 
         let mut p1_other_participants: Vec<Participant> = vec!(p2.clone());
         let p1_state = DistributedKeyGeneration::<RoundOne>::new(&params,
                                                                  &p1_dh_sk,
                                                                  &p1.index,
                                                                  &p1coeffs,
-                                                                 &mut p1_other_participants).unwrap();
+                                                                 &mut p1_other_participants,
+                                                                 "Φ").unwrap();
         let p1_their_encrypted_secret_shares = p1_state.their_encrypted_secret_shares().unwrap();
 
         let mut p2_other_participants: Vec<Participant> = vec!(p1.clone());
@@ -773,7 +776,8 @@ mod test {
                                                                  &p2_dh_sk,
                                                                  &p2.index,
                                                                  &p2coeffs,
-                                                                 &mut p2_other_participants).unwrap();
+                                                                 &mut p2_other_participants,
+                                                                 "Φ").unwrap();
         let p2_their_encrypted_secret_shares = p2_state.their_encrypted_secret_shares().unwrap();
 
         let p1_my_encrypted_secret_shares = vec!(p2_their_encrypted_secret_shares[0].clone()); // XXX FIXME indexing
@@ -811,18 +815,19 @@ mod test {
     fn signing_and_verification_3_out_of_5() {
         let params = Parameters { n: 5, t: 3 };
 
-        let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, 1);
-        let (p2, p2coeffs, p2_dh_sk) = Participant::new(&params, 2);
-        let (p3, p3coeffs, p3_dh_sk) = Participant::new(&params, 3);
-        let (p4, p4coeffs, p4_dh_sk) = Participant::new(&params, 4);
-        let (p5, p5coeffs, p5_dh_sk) = Participant::new(&params, 5);
+        let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, 1, "Φ");
+        let (p2, p2coeffs, p2_dh_sk) = Participant::new(&params, 2, "Φ");
+        let (p3, p3coeffs, p3_dh_sk) = Participant::new(&params, 3, "Φ");
+        let (p4, p4coeffs, p4_dh_sk) = Participant::new(&params, 4, "Φ");
+        let (p5, p5coeffs, p5_dh_sk) = Participant::new(&params, 5, "Φ");
 
         let mut p1_other_participants: Vec<Participant> = vec!(p2.clone(), p3.clone(), p4.clone(), p5.clone());
         let p1_state = DistributedKeyGeneration::<RoundOne>::new(&params,
                                                                  &p1_dh_sk,
                                                                  &p1.index,
                                                                  &p1coeffs,
-                                                                 &mut p1_other_participants).unwrap();
+                                                                 &mut p1_other_participants,
+                                                                 "Φ").unwrap();
         let p1_their_encrypted_secret_shares = p1_state.their_encrypted_secret_shares().unwrap();
 
         let mut p2_other_participants: Vec<Participant> = vec!(p1.clone(), p3.clone(), p4.clone(), p5.clone());
@@ -830,7 +835,8 @@ mod test {
                                                                  &p2_dh_sk,
                                                                  &p2.index,
                                                                  &p2coeffs,
-                                                                 &mut p2_other_participants).unwrap();
+                                                                 &mut p2_other_participants,
+                                                                 "Φ").unwrap();
         let p2_their_encrypted_secret_shares = p2_state.their_encrypted_secret_shares().unwrap();
 
         let mut p3_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p4.clone(), p5.clone());
@@ -838,7 +844,8 @@ mod test {
                                                                  &p3_dh_sk,
                                                                  &p3.index,
                                                                  &p3coeffs,
-                                                                 &mut p3_other_participants).unwrap();
+                                                                 &mut p3_other_participants,
+                                                                 "Φ").unwrap();
         let p3_their_encrypted_secret_shares = p3_state.their_encrypted_secret_shares().unwrap();
 
         let mut p4_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p3.clone(), p5.clone());
@@ -846,7 +853,8 @@ mod test {
                                                                  &p4_dh_sk,
                                                                  &p4.index,
                                                                  &p4coeffs,
-                                                                 &mut p4_other_participants).unwrap();
+                                                                 &mut p4_other_participants,
+                                                                 "Φ").unwrap();
         let p4_their_encrypted_secret_shares = p4_state.their_encrypted_secret_shares().unwrap();
 
         let mut p5_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p3.clone(), p4.clone());
@@ -854,7 +862,8 @@ mod test {
                                                                  &p5_dh_sk,
                                                                  &p5.index,
                                                                  &p5coeffs,
-                                                                 &mut p5_other_participants).unwrap();
+                                                                 &mut p5_other_participants,
+                                                                 "Φ").unwrap();
         let p5_their_encrypted_secret_shares = p5_state.their_encrypted_secret_shares().unwrap();
 
         let p1_my_encrypted_secret_shares = vec!(p2_their_encrypted_secret_shares[0].clone(), // XXX FIXME indexing
@@ -929,19 +938,20 @@ mod test {
         fn do_keygen() -> Result<(Parameters, SecretKey, SecretKey, SecretKey, GroupKey), ()> {
             let params = Parameters { n: 3, t: 2 };
 
-            let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, 1);
-            let (p2, p2coeffs, p2_dh_sk) = Participant::new(&params, 2);
-            let (p3, p3coeffs, p3_dh_sk) = Participant::new(&params, 3);
+            let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, 1, "Φ");
+            let (p2, p2coeffs, p2_dh_sk) = Participant::new(&params, 2, "Φ");
+            let (p3, p3coeffs, p3_dh_sk) = Participant::new(&params, 3, "Φ");
 
-            p2.proof_of_secret_key.verify(&p2.index, &p2.commitments[0])?;
-            p3.proof_of_secret_key.verify(&p3.index, &p3.commitments[0])?;
+            p2.proof_of_secret_key.verify(&p2.index, &p2.commitments[0], "Φ")?;
+            p3.proof_of_secret_key.verify(&p3.index, &p3.commitments[0], "Φ")?;
 
             let mut p1_other_participants: Vec<Participant> = vec!(p2.clone(), p3.clone());
             let p1_state = DistributedKeyGeneration::<RoundOne>::new(&params,
                                                                      &p1_dh_sk,
                                                                      &p1.index,
                                                                      &p1coeffs,
-                                                                     &mut p1_other_participants).or(Err(()))?;
+                                                                     &mut p1_other_participants,
+                                                                     "Φ").or(Err(()))?;
             let p1_their_encrypted_secret_shares = p1_state.their_encrypted_secret_shares()?;
 
             let mut p2_other_participants: Vec<Participant> = vec!(p1.clone(), p3.clone());
@@ -949,7 +959,8 @@ mod test {
                                                                      &p2_dh_sk,
                                                                      &p2.index,
                                                                      &p2coeffs,
-                                                                     &mut p2_other_participants).or(Err(()))?;
+                                                                     &mut p2_other_participants,
+                                                                     "Φ").or(Err(()))?;
             let p2_their_encrypted_secret_shares = p2_state.their_encrypted_secret_shares()?;
 
             let mut p3_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone());
@@ -957,7 +968,8 @@ mod test {
                                                                       &p3_dh_sk,
                                                                       &p3.index,
                                                                       &p3coeffs,
-                                                                      &mut p3_other_participants).or(Err(()))?;
+                                                                      &mut p3_other_participants,
+                                                                      "Φ").or(Err(()))?;
             let p3_their_encrypted_secret_shares = p3_state.their_encrypted_secret_shares()?;
 
             let p1_my_encrypted_secret_shares = vec!(p2_their_encrypted_secret_shares[0].clone(), // XXX FIXME indexing
