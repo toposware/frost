@@ -196,6 +196,8 @@ use rand::rngs::OsRng;
 use sha2::Digest;
 use sha2::Sha512;
 
+use hkdf::Hkdf;
+
 use zeroize::Zeroize;
 
 use crate::nizk::NizkOfSecretKey;
@@ -205,7 +207,6 @@ use aes::{Aes256, Block};
 use aes::cipher::{
     BlockEncrypt, BlockDecrypt, NewBlockCipher,
     generic_array::GenericArray,
-    consts::U32,
 };
 
 /// Errors that may happen during Key Generation
@@ -521,12 +522,18 @@ pub trait Round2: private::Sealed {}
 impl Round1 for RoundOne {}
 impl Round2 for RoundTwo {}
 
-fn encrypt_share(my_index: &u32, share: &SecretShare, aes_key: &GenericArray<u8, U32>) -> EncryptedSecretShare {
+fn encrypt_share(my_index: &u32, share: &SecretShare, aes_key: &[u8; 32]) -> EncryptedSecretShare {
+    let hkdf = Hkdf::<Sha512>::new(None, &aes_key[..]);
+    let mut final_aes_key = [0u8; 32];
+    hkdf.expand(&[], &mut final_aes_key)
+        .expect("KDF expansion failed unexpectedly");
+
+    let final_aes_key = GenericArray::from_slice(&final_aes_key);
     let share_bytes = share.polynomial_evaluation.to_bytes();
     let mut high_block = *Block::from_slice(&share_bytes[..16]);
     let mut low_block = *Block::from_slice(&share_bytes[16..]);
 
-    let cipher = Aes256::new(&aes_key);
+    let cipher = Aes256::new(&final_aes_key);
 
     cipher.encrypt_block(&mut high_block);
     cipher.encrypt_block(&mut low_block);
@@ -540,11 +547,18 @@ fn encrypt_share(my_index: &u32, share: &SecretShare, aes_key: &GenericArray<u8,
     }
 }
 
-fn decrypt_share(encrypted_share: &EncryptedSecretShare, aes_key: &GenericArray<u8, U32>) -> Result<SecretShare, Error> {
+fn decrypt_share(encrypted_share: &EncryptedSecretShare, aes_key: &[u8; 32]) -> Result<SecretShare, Error> {
     let mut high_block = *Block::from_slice(&encrypted_share.encrypted_polynomial_evaluation[..16]);
     let mut low_block = *Block::from_slice(&encrypted_share.encrypted_polynomial_evaluation[16..]);
 
-    let cipher = Aes256::new(&aes_key);
+    let hkdf = Hkdf::<Sha512>::new(None, &aes_key[..]);
+    let mut final_aes_key = [0u8; 32];
+    hkdf.expand(&[], &mut final_aes_key)
+        .expect("KDF expansion failed unexpectedly");
+
+    let final_aes_key = GenericArray::from_slice(&final_aes_key);
+
+    let cipher = Aes256::new(&final_aes_key);
 
     cipher.decrypt_block(&mut high_block);
     cipher.decrypt_block(&mut low_block);
@@ -646,9 +660,8 @@ impl DistributedKeyGeneration<RoundOne> {
             let share = SecretShare::evaluate_polynomial(&p.index, my_coefficients);
 
             let dh_key = (p.dh_public_key * dh_private_key).compress().to_bytes();
-            let dh_key = GenericArray::from_slice(&dh_key);
 
-            their_encrypted_secret_shares.push(encrypt_share(my_index, &share, dh_key));
+            their_encrypted_secret_shares.push(encrypt_share(my_index, &share, &dh_key));
         }
 
         let my_secret_share = SecretShare::evaluate_polynomial(my_index, my_coefficients);
@@ -708,7 +721,6 @@ impl DistributedKeyGeneration<RoundOne> {
             for pk in self.state.their_dh_public_keys.iter(){
                 if pk.0 == encrypted_share.sender_index {
                     let dh_key = (pk.1 * self.state.dh_private_key).compress().to_bytes();
-                    let dh_key = GenericArray::from_slice(&dh_key);
 
                     // Step 2.2: Each share is verified by calculating:
                     //           g^{f_l(i)} ?= \Prod_{k=0}^{t-1} \phi_{lk}^{i^{k} mod q},
@@ -737,7 +749,7 @@ impl DistributedKeyGeneration<RoundOne> {
                                     Complaint {
                                         maker_index: encrypted_share.receiver_index,
                                         accused_index: pk.0,
-                                        dh_key: *dh_key,
+                                        dh_key,
                                         proof: ComplaintProof {
                                             a1: &RISTRETTO_BASEPOINT_TABLE * &r,
                                             a2: pk.1 * r,
@@ -855,7 +867,7 @@ pub struct Complaint {
     /// The index of the alleged misbehaving participant.
     pub accused_index: u32,
     /// The shared DH key.
-    pub dh_key: GenericArray<u8, U32>,
+    pub dh_key: [u8; 32],
     /// The complaint proof.
     pub proof: ComplaintProof,
 }
@@ -1478,10 +1490,9 @@ mod test {
         let original_share = SecretShare { index: 2,
                                            polynomial_evaluation: Scalar::random(&mut rng)};
 
-        let mut random_bytes = [0u8; 32];
-        rng.fill(&mut random_bytes);
+        let mut key = [0u8; 32];
+        rng.fill(&mut key);
 
-        let key = GenericArray::from_slice(&random_bytes);
         let index = 1;
 
         let encrypted_share = encrypt_share(&index, &original_share, &key);
