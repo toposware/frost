@@ -20,7 +20,7 @@ use frost_dalek::compute_message_hash;
 use frost_dalek::generate_commitment_share_lists;
 use frost_dalek::keygen::{
     Coefficients,
-    SecretShare,
+    EncryptedSecretShare,
 };
 use frost_dalek::DistributedKeyGeneration;
 use frost_dalek::IndividualSecretKey;
@@ -32,6 +32,8 @@ use frost_dalek::precomputation::{
 };
 use frost_dalek::SignatureAggregator;
 
+use curve25519_dalek::scalar::Scalar;
+
 const NUMBER_OF_PARTICIPANTS: u32 = 5;
 const THRESHOLD_OF_PARTICIPANTS: u32 = 3;
 
@@ -40,25 +42,27 @@ mod dkg_benches {
 
     fn participant_new(c: &mut Criterion) {
         let params = Parameters { n: NUMBER_OF_PARTICIPANTS, t: THRESHOLD_OF_PARTICIPANTS };
-        c.bench_function("Participant creation", move |b| b.iter(|| Participant::new(&params, 1)));
+        c.bench_function("Participant creation", move |b| b.iter(|| Participant::new(&params, 1, "Φ")));
     }
 
     fn round_one_t_out_of_n(c: &mut Criterion) {
         let params = Parameters { n: NUMBER_OF_PARTICIPANTS, t: THRESHOLD_OF_PARTICIPANTS };
 
         let mut participants_except_p1 = Vec::<Participant>::with_capacity((NUMBER_OF_PARTICIPANTS - 1) as usize);
-        let (p1, coefficient) = Participant::new(&params, 1);
+        let (p1, coefficient, p1_dh_sk) = Participant::new(&params, 1, "Φ");
 
         for i in 2..NUMBER_OF_PARTICIPANTS+1 {
-            let (p,_) = Participant::new(&params, i);
+            let (p, _, _) = Participant::new(&params, i, "Φ");
             participants_except_p1.push(p);
         }
 
         c.bench_function("Round One", move |b| {
             b.iter(|| DistributedKeyGeneration::<_>::new(&params,
+                                                         &p1_dh_sk,
                                                          &p1.index,
                                                          &coefficient,
-                                                         &mut participants_except_p1));
+                                                         &mut participants_except_p1,
+                                                         "Φ"));
         });
     }
 
@@ -67,35 +71,41 @@ mod dkg_benches {
 
         let mut participants = Vec::<Participant>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
         let mut coefficients = Vec::<Coefficients>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
+        let mut dh_secret_keys = Vec::<Scalar>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
 
         for i in 1..NUMBER_OF_PARTICIPANTS+1 {
-            let (p,c) = Participant::new(&params, i);
+            let (p, c, dh_sk) = Participant::new(&params, i, "Φ");
             participants.push(p);
             coefficients.push(c);
+            dh_secret_keys.push(dh_sk);
         }
 
-        let mut p1_my_secret_shares = Vec::<SecretShare>::with_capacity((NUMBER_OF_PARTICIPANTS - 1) as usize);
+        let mut p1_my_encrypted_secret_shares = Vec::<EncryptedSecretShare>::with_capacity((NUMBER_OF_PARTICIPANTS - 1) as usize);
 
         let mut participants_except_p1: Vec::<Participant> = participants.clone();
         participants_except_p1.remove(0);
         let p1_state = DistributedKeyGeneration::<_>::new(&params,
+                                                          &dh_secret_keys[0],
                                                           &participants[0].index,
                                                           &coefficients[0],
-                                                          &mut participants_except_p1).unwrap();
+                                                          &mut participants_except_p1,
+                                                          "Φ").unwrap();
 
         for i in 2..NUMBER_OF_PARTICIPANTS+1 {
             let mut participants_except_pi: Vec::<Participant> = participants.clone();
             participants_except_pi.remove((i-1) as usize);
             let pi_state = DistributedKeyGeneration::<_>::new(&params,
+                                                              &dh_secret_keys[(i-1) as usize],
                                                               &participants[(i-1) as usize].index,
                                                               &coefficients[(i-1) as usize],
-                                                              &mut participants_except_pi).unwrap();
-            let pi_their_secret_shares = pi_state.their_secret_shares().unwrap();
-            p1_my_secret_shares.push(pi_their_secret_shares[0].clone());
+                                                              &mut participants_except_pi,
+                                                              "Φ").unwrap();
+            let pi_their_encrypted_secret_shares = pi_state.their_encrypted_secret_shares().unwrap();
+            p1_my_encrypted_secret_shares.push(pi_their_encrypted_secret_shares[0].clone());
         }
 
         c.bench_function("Round Two", move |b| {
-            b.iter(|| p1_state.clone().to_round_two(p1_my_secret_shares.clone()));
+            b.iter(|| p1_state.clone().to_round_two(p1_my_encrypted_secret_shares.clone()));
         });
     }
 
@@ -104,34 +114,40 @@ mod dkg_benches {
 
         let mut participants = Vec::<Participant>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
         let mut coefficients = Vec::<Coefficients>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
+        let mut dh_secret_keys = Vec::<Scalar>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
 
         for i in 1..NUMBER_OF_PARTICIPANTS+1 {
-            let (p,c) = Participant::new(&params, i);
+            let (p, c, dh_sk) = Participant::new(&params, i, "Φ");
             participants.push(p);
             coefficients.push(c);
+            dh_secret_keys.push(dh_sk);
         }
 
-        let mut p1_my_secret_shares = Vec::<SecretShare>::with_capacity((NUMBER_OF_PARTICIPANTS - 1) as usize);
+        let mut p1_my_encrypted_secret_shares = Vec::<EncryptedSecretShare>::with_capacity((NUMBER_OF_PARTICIPANTS - 1) as usize);
 
         let mut participants_except_p1: Vec::<Participant> = participants.clone();
         participants_except_p1.remove(0);
         let p1_state = DistributedKeyGeneration::<_>::new(&params,
+                                                          &dh_secret_keys[0],
                                                           &participants[0].index,
                                                           &coefficients[0],
-                                                          &mut participants_except_p1).unwrap();
+                                                          &mut participants_except_p1,
+                                                          "Φ").unwrap();
 
         for i in 2..NUMBER_OF_PARTICIPANTS+1 {
             let mut participants_except_pi: Vec::<Participant> = participants.clone();
             participants_except_pi.remove((i-1) as usize);
             let pi_state = DistributedKeyGeneration::<_>::new(&params,
+                                                              &dh_secret_keys[(i-1) as usize],
                                                               &participants[(i-1) as usize].index,
                                                               &coefficients[(i-1) as usize],
-                                                              &mut participants_except_pi).unwrap();
-            let pi_their_secret_shares = pi_state.their_secret_shares().unwrap();
-            p1_my_secret_shares.push(pi_their_secret_shares[0].clone());
+                                                              &mut participants_except_pi,
+                                                              "Φ").unwrap();
+            let pi_their_encrypted_secret_shares = pi_state.their_encrypted_secret_shares().unwrap();
+            p1_my_encrypted_secret_shares.push(pi_their_encrypted_secret_shares[0].clone());
         }
 
-        let p1_state = p1_state.to_round_two(p1_my_secret_shares).unwrap();
+        let p1_state = p1_state.to_round_two(p1_my_encrypted_secret_shares).unwrap();
 
         c.bench_function("Finish", move |b| {
             let pk = participants[0].public_key().unwrap();
@@ -159,14 +175,16 @@ mod sign_benches {
 
         let mut participants = Vec::<Participant>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
         let mut coefficients = Vec::<Coefficients>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
+        let mut dh_secret_keys = Vec::<Scalar>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
 
         for i in 1..NUMBER_OF_PARTICIPANTS+1 {
-            let (p,c) = Participant::new(&params, i);
+            let (p, c, dh_sk) = Participant::new(&params, i, "Φ");
             participants.push(p);
             coefficients.push(c);
+            dh_secret_keys.push(dh_sk);
         }
 
-        let mut participants_secret_shares: Vec<Vec::<SecretShare>> = 
+        let mut participants_encrypted_secret_shares: Vec<Vec::<EncryptedSecretShare>> = 
                 (0..NUMBER_OF_PARTICIPANTS).map(|_| Vec::with_capacity((NUMBER_OF_PARTICIPANTS - 1) as usize)).collect();
 
         let mut participants_states_1 = Vec::<DistributedKeyGeneration::<_>>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
@@ -176,32 +194,34 @@ mod sign_benches {
             let mut participants_except_pi: Vec::<Participant> = participants.clone();
             participants_except_pi.remove((i-1) as usize);
             let pi_state = DistributedKeyGeneration::<_>::new(&params,
+                                                              &dh_secret_keys[(i-1) as usize],
                                                               &participants[(i-1) as usize].index,
                                                               &coefficients[(i-1) as usize],
-                                                              &mut participants_except_pi).unwrap();
-            let pi_their_secret_shares = pi_state.their_secret_shares().unwrap();
-            participants_secret_shares[(i-1) as usize] = pi_their_secret_shares.clone();
+                                                              &mut participants_except_pi,
+                                                              "Φ").unwrap();
+            let pi_their_encrypted_secret_shares = pi_state.their_encrypted_secret_shares().unwrap();
+            participants_encrypted_secret_shares[(i-1) as usize] = pi_their_encrypted_secret_shares.clone();
             participants_states_1.push(pi_state);
         }
 
-        let mut p1_my_secret_shares = Vec::<SecretShare>::with_capacity((NUMBER_OF_PARTICIPANTS - 1) as usize);
+        let mut p1_my_encrypted_secret_shares = Vec::<EncryptedSecretShare>::with_capacity((NUMBER_OF_PARTICIPANTS - 1) as usize);
         for j in 2..NUMBER_OF_PARTICIPANTS+1 {
-            p1_my_secret_shares.push(participants_secret_shares[(j-1) as usize][0].clone());
+            p1_my_encrypted_secret_shares.push(participants_encrypted_secret_shares[(j-1) as usize][0].clone());
         }
-        participants_states_2.push(participants_states_1[0].clone().to_round_two(p1_my_secret_shares).unwrap());
+        participants_states_2.push(participants_states_1[0].clone().to_round_two(p1_my_encrypted_secret_shares).unwrap());
 
         for i in 2..NUMBER_OF_PARTICIPANTS+1 {
-            let mut pi_my_secret_shares = Vec::<SecretShare>::with_capacity((NUMBER_OF_PARTICIPANTS - 1) as usize);
+            let mut pi_my_encrypted_secret_shares = Vec::<EncryptedSecretShare>::with_capacity((NUMBER_OF_PARTICIPANTS - 1) as usize);
             let mut increment = -1i32;
             for j in 1..i {
-                pi_my_secret_shares.push(participants_secret_shares[(j-1) as usize][((i-j) as i32 + increment) as usize].clone());
+                pi_my_encrypted_secret_shares.push(participants_encrypted_secret_shares[(j-1) as usize][((i-j) as i32 + increment) as usize].clone());
                 increment += 1;
             }
             for j in (i+1)..NUMBER_OF_PARTICIPANTS+1 {
-                pi_my_secret_shares.push(participants_secret_shares[(j-1) as usize][(i-1) as usize].clone());
+                pi_my_encrypted_secret_shares.push(participants_encrypted_secret_shares[(j-1) as usize][(i-1) as usize].clone());
             }
 
-            participants_states_2.push(participants_states_1[(i-1) as usize].clone().to_round_two(pi_my_secret_shares).unwrap());
+            participants_states_2.push(participants_states_1[(i-1) as usize].clone().to_round_two(pi_my_encrypted_secret_shares).unwrap());
         }
 
         let mut participants_secret_keys = Vec::<IndividualSecretKey>::with_capacity(THRESHOLD_OF_PARTICIPANTS as usize);
@@ -247,14 +267,16 @@ mod sign_benches {
 
         let mut participants = Vec::<Participant>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
         let mut coefficients = Vec::<Coefficients>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
+        let mut dh_secret_keys = Vec::<Scalar>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
 
         for i in 1..NUMBER_OF_PARTICIPANTS+1 {
-            let (p,c) = Participant::new(&params, i);
+            let (p, c, dh_sk) = Participant::new(&params, i, "Φ");
             participants.push(p);
             coefficients.push(c);
+            dh_secret_keys.push(dh_sk);
         }
 
-        let mut participants_secret_shares: Vec<Vec::<SecretShare>> = 
+        let mut participants_encrypted_secret_shares: Vec<Vec::<EncryptedSecretShare>> = 
                 (0..NUMBER_OF_PARTICIPANTS).map(|_| Vec::with_capacity((NUMBER_OF_PARTICIPANTS - 1) as usize)).collect();
 
         let mut participants_states_1 = Vec::<DistributedKeyGeneration::<_>>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
@@ -264,32 +286,34 @@ mod sign_benches {
             let mut participants_except_pi: Vec::<Participant> = participants.clone();
             participants_except_pi.remove((i-1) as usize);
             let pi_state = DistributedKeyGeneration::<_>::new(&params,
+                                                              &dh_secret_keys[(i-1) as usize],
                                                               &participants[(i-1) as usize].index,
                                                               &coefficients[(i-1) as usize],
-                                                              &mut participants_except_pi).unwrap();
-            let pi_their_secret_shares = pi_state.their_secret_shares().unwrap();
-            participants_secret_shares[(i-1) as usize] = pi_their_secret_shares.clone();
+                                                              &mut participants_except_pi,
+                                                              "Φ").unwrap();
+            let pi_their_encrypted_secret_shares = pi_state.their_encrypted_secret_shares().unwrap();
+            participants_encrypted_secret_shares[(i-1) as usize] = pi_their_encrypted_secret_shares.clone();
             participants_states_1.push(pi_state);
         }
 
-        let mut p1_my_secret_shares = Vec::<SecretShare>::with_capacity((NUMBER_OF_PARTICIPANTS - 1) as usize);
+        let mut p1_my_encrypted_secret_shares = Vec::<EncryptedSecretShare>::with_capacity((NUMBER_OF_PARTICIPANTS - 1) as usize);
         for j in 2..NUMBER_OF_PARTICIPANTS+1 {
-            p1_my_secret_shares.push(participants_secret_shares[(j-1) as usize][0].clone());
+            p1_my_encrypted_secret_shares.push(participants_encrypted_secret_shares[(j-1) as usize][0].clone());
         }
-        participants_states_2.push(participants_states_1[0].clone().to_round_two(p1_my_secret_shares).unwrap());
+        participants_states_2.push(participants_states_1[0].clone().to_round_two(p1_my_encrypted_secret_shares).unwrap());
 
         for i in 2..NUMBER_OF_PARTICIPANTS+1 {
-            let mut pi_my_secret_shares = Vec::<SecretShare>::with_capacity((NUMBER_OF_PARTICIPANTS - 1) as usize);
+            let mut pi_my_encrypted_secret_shares = Vec::<EncryptedSecretShare>::with_capacity((NUMBER_OF_PARTICIPANTS - 1) as usize);
             let mut increment = -1i32;
             for j in 1..i {
-                pi_my_secret_shares.push(participants_secret_shares[(j-1) as usize][((i-j) as i32 + increment) as usize].clone());
+                pi_my_encrypted_secret_shares.push(participants_encrypted_secret_shares[(j-1) as usize][((i-j) as i32 + increment) as usize].clone());
                 increment += 1;
             }
             for j in (i+1)..NUMBER_OF_PARTICIPANTS+1 {
-                pi_my_secret_shares.push(participants_secret_shares[(j-1) as usize][(i-1) as usize].clone());
+                pi_my_encrypted_secret_shares.push(participants_encrypted_secret_shares[(j-1) as usize][(i-1) as usize].clone());
             }
 
-            participants_states_2.push(participants_states_1[(i-1) as usize].clone().to_round_two(pi_my_secret_shares).unwrap());
+            participants_states_2.push(participants_states_1[(i-1) as usize].clone().to_round_two(pi_my_encrypted_secret_shares).unwrap());
         }
 
         let mut participants_secret_keys = Vec::<IndividualSecretKey>::with_capacity(THRESHOLD_OF_PARTICIPANTS as usize);
@@ -345,14 +369,16 @@ mod sign_benches {
 
         let mut participants = Vec::<Participant>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
         let mut coefficients = Vec::<Coefficients>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
+        let mut dh_secret_keys = Vec::<Scalar>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
 
         for i in 1..NUMBER_OF_PARTICIPANTS+1 {
-            let (p,c) = Participant::new(&params, i);
+            let (p, c, dh_sk) = Participant::new(&params, i, "Φ");
             participants.push(p);
             coefficients.push(c);
+            dh_secret_keys.push(dh_sk);
         }
 
-        let mut participants_secret_shares: Vec<Vec::<SecretShare>> = 
+        let mut participants_encrypted_secret_shares: Vec<Vec::<EncryptedSecretShare>> = 
                 (0..NUMBER_OF_PARTICIPANTS).map(|_| Vec::with_capacity((NUMBER_OF_PARTICIPANTS - 1) as usize)).collect();
 
         let mut participants_states_1 = Vec::<DistributedKeyGeneration::<_>>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
@@ -362,32 +388,34 @@ mod sign_benches {
             let mut participants_except_pi: Vec::<Participant> = participants.clone();
             participants_except_pi.remove((i-1) as usize);
             let pi_state = DistributedKeyGeneration::<_>::new(&params,
+                                                              &dh_secret_keys[(i-1) as usize],
                                                               &participants[(i-1) as usize].index,
                                                               &coefficients[(i-1) as usize],
-                                                              &mut participants_except_pi).unwrap();
-            let pi_their_secret_shares = pi_state.their_secret_shares().unwrap();
-            participants_secret_shares[(i-1) as usize] = pi_their_secret_shares.clone();
+                                                              &mut participants_except_pi,
+                                                              "Φ").unwrap();
+            let pi_their_encrypted_secret_shares = pi_state.their_encrypted_secret_shares().unwrap();
+            participants_encrypted_secret_shares[(i-1) as usize] = pi_their_encrypted_secret_shares.clone();
             participants_states_1.push(pi_state);
         }
 
-        let mut p1_my_secret_shares = Vec::<SecretShare>::with_capacity((NUMBER_OF_PARTICIPANTS - 1) as usize);
+        let mut p1_my_encrypted_secret_shares = Vec::<EncryptedSecretShare>::with_capacity((NUMBER_OF_PARTICIPANTS - 1) as usize);
         for j in 2..NUMBER_OF_PARTICIPANTS+1 {
-            p1_my_secret_shares.push(participants_secret_shares[(j-1) as usize][0].clone());
+            p1_my_encrypted_secret_shares.push(participants_encrypted_secret_shares[(j-1) as usize][0].clone());
         }
-        participants_states_2.push(participants_states_1[0].clone().to_round_two(p1_my_secret_shares).unwrap());
+        participants_states_2.push(participants_states_1[0].clone().to_round_two(p1_my_encrypted_secret_shares).unwrap());
 
         for i in 2..NUMBER_OF_PARTICIPANTS+1 {
-            let mut pi_my_secret_shares = Vec::<SecretShare>::with_capacity((NUMBER_OF_PARTICIPANTS - 1) as usize);
+            let mut pi_my_encrypted_secret_shares = Vec::<EncryptedSecretShare>::with_capacity((NUMBER_OF_PARTICIPANTS - 1) as usize);
             let mut increment = -1i32;
             for j in 1..i {
-                pi_my_secret_shares.push(participants_secret_shares[(j-1) as usize][((i-j) as i32 + increment) as usize].clone());
+                pi_my_encrypted_secret_shares.push(participants_encrypted_secret_shares[(j-1) as usize][((i-j) as i32 + increment) as usize].clone());
                 increment += 1;
             }
             for j in (i+1)..NUMBER_OF_PARTICIPANTS+1 {
-                pi_my_secret_shares.push(participants_secret_shares[(j-1) as usize][(i-1) as usize].clone());
+                pi_my_encrypted_secret_shares.push(participants_encrypted_secret_shares[(j-1) as usize][(i-1) as usize].clone());
             }
 
-            participants_states_2.push(participants_states_1[(i-1) as usize].clone().to_round_two(pi_my_secret_shares).unwrap());
+            participants_states_2.push(participants_states_1[(i-1) as usize].clone().to_round_two(pi_my_encrypted_secret_shares).unwrap());
         }
 
         let mut participants_secret_keys = Vec::<IndividualSecretKey>::with_capacity(THRESHOLD_OF_PARTICIPANTS as usize);

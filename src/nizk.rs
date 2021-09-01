@@ -47,6 +47,7 @@ impl NizkOfSecretKey {
         index: &u32,
         secret_key: &Scalar,
         public_key: &RistrettoPoint,
+        context_string: &str,
         mut csprng: impl Rng + CryptoRng,
     ) -> Self
     {
@@ -56,7 +57,7 @@ impl NizkOfSecretKey {
         let mut hram = Sha512::new();
 
         hram.update(index.to_be_bytes());
-        hram.update("Φ");
+        hram.update(context_string);
         hram.update(public_key.compress().as_bytes());
         hram.update(M.compress().as_bytes());
 
@@ -67,13 +68,13 @@ impl NizkOfSecretKey {
     }
 
     /// Verify that the prover does indeed know the secret key.
-    pub fn verify(&self, index: &u32, public_key: &RistrettoPoint) -> Result<(), ()> {
+    pub fn verify(&self, index: &u32, public_key: &RistrettoPoint, context_string: &str) -> Result<(), ()> {
         let M_prime: RistrettoPoint = (&RISTRETTO_BASEPOINT_TABLE * &self.r) + (public_key * -&self.s);
 
         let mut hram = Sha512::new();
 
         hram.update(index.to_be_bytes());
-        hram.update("Φ");
+        hram.update(context_string);
         hram.update(public_key.compress().as_bytes());
         hram.update(M_prime.compress().as_bytes());
 
