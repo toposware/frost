@@ -9,6 +9,8 @@
 
 //! Zero-knowledge proofs.
 
+use crate::keygen::Error;
+
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_TABLE;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
@@ -85,5 +87,28 @@ impl NizkOfSecretKey {
         }
 
         Err(())
+    }
+
+    /// Serialise this proof to an array of bytes
+    pub fn to_bytes(&self) -> [u8; 64] {
+        let mut res = [0u8; 64];
+        res[0..32].copy_from_slice(&self.s.to_bytes());
+        res[32..64].copy_from_slice(&self.r.to_bytes());
+
+        res
+    }
+
+    /// Deserialise this slice of bytes to a NiZK proof
+    pub fn from_bytes(bytes: &[u8]) -> Result<NizkOfSecretKey, Error> {
+        let mut array = [0u8; 32];
+        array.copy_from_slice(&bytes[0..32]);
+        let s = Scalar::from_canonical_bytes(array)
+                .ok_or(Error::SerialisationError)?;
+
+        array.copy_from_slice(&bytes[32..64]);
+        let r = Scalar::from_canonical_bytes(array)
+                .ok_or(Error::SerialisationError)?;
+
+        Ok(NizkOfSecretKey { s, r })
     }
 }

@@ -9,13 +9,18 @@
 
 //! Precomputation for one-round signing.
 
+use crate::keygen::Error;
+
 #[cfg(feature = "std")]
 use std::vec::Vec;
 
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 
+use core::convert::TryInto;
+
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_TABLE;
+use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::traits::Identity;
@@ -133,6 +138,53 @@ pub struct PublicCommitmentShareList {
     pub participant_index: u32,
     /// The published commitments.
     pub commitments: Vec<(RistrettoPoint, RistrettoPoint)>,
+}
+
+impl PublicCommitmentShareList {
+    /// Serialise this commitment share list to a Vec of bytes
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut res = Vec::with_capacity(8 + 64 * self.commitments.len());
+        res.extend_from_slice(&mut self.participant_index.to_le_bytes());
+
+        let len = self.commitments.len();
+        res.extend_from_slice(&mut TryInto::<u32>::try_into(len).unwrap().to_le_bytes());
+        for i in 0..len {
+            res.extend_from_slice(&mut self.commitments[i].0.compress().to_bytes());
+            res.extend_from_slice(&mut self.commitments[i].1.compress().to_bytes());
+        }
+
+        res
+    }
+
+    /// Deserialise this slice of bytes to a `PublicCommitmentShareList`
+    pub fn from_bytes(bytes: &[u8]) -> Result<PublicCommitmentShareList, Error> {
+        let participant_index = u32::from_le_bytes(
+            bytes[0..4]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?,
+        );
+        let len = u32::from_le_bytes(
+            bytes[4..8]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?,
+        );
+        let mut commitments: Vec<(RistrettoPoint, RistrettoPoint)> = Vec::with_capacity(len as usize);
+        let mut index_slice = 8;
+        let mut array = [0u8; 32];
+
+        for _ in 0..len {
+            array.copy_from_slice(&bytes[index_slice..index_slice + 32]);
+            let point1 = CompressedRistretto(array).decompress().ok_or(Error::SerialisationError)?;
+            array.copy_from_slice(&bytes[index_slice + 32..index_slice + 64]);
+
+            commitments.push((point1, CompressedRistretto(array).decompress().ok_or(Error::SerialisationError)?));
+            index_slice += 64;
+        }
+        Ok(PublicCommitmentShareList {
+            participant_index,
+            commitments,
+        })
+    }
 }
 
 /// Pre-compute a list of [`CommitmentShare`]s for single-round threshold signing.

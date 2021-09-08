@@ -18,6 +18,7 @@ use hashbrown::HashMap;
 use hashbrown::hash_map::Values;
 
 use core::cmp::Ordering;
+use core::convert::TryInto;
 
 #[cfg(feature = "std")]
 use std::vec::Vec;
@@ -32,6 +33,7 @@ use curve25519_dalek::scalar::Scalar;
 use sha2::Digest;
 use sha2::Sha512;
 
+use crate::keygen::Error;
 use crate::keygen::GroupKey;
 use crate::keygen::IndividualPublicKey;
 use crate::parameters::Parameters;
@@ -83,6 +85,33 @@ pub struct PartialThresholdSignature {
     pub(crate) z: Scalar,
 }
 
+impl PartialThresholdSignature {
+    /// Serialize this partial threshold signature to an array of 36 bytes.
+    pub fn to_bytes(&self) -> [u8; 36] {
+        let mut bytes = [0u8; 36];
+
+        bytes[..4].copy_from_slice(&self.index.to_le_bytes());
+        bytes[4..].copy_from_slice(self.z.as_bytes());
+
+        bytes
+    }
+
+    /// Attempt to deserialize a partial threshold signature from an array of 36 bytes.
+    pub fn from_bytes(bytes: [u8; 36]) -> Result<PartialThresholdSignature, Error> {
+        let index = u32::from_le_bytes(
+            bytes[0..4]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?
+        );
+
+        let mut array = [0u8; 32];
+        array.copy_from_slice(&bytes[4..36]);
+        let z = Scalar::from_canonical_bytes(array).ok_or(Error::SerialisationError)?;
+
+        Ok(PartialThresholdSignature { index, z })
+    }
+}
+
 /// A complete, aggregated threshold signature.
 #[derive(Debug)]
 pub struct ThresholdSignature {
@@ -101,16 +130,16 @@ impl ThresholdSignature {
     }
 
     /// Attempt to deserialize a threshold signature from an array of 64 bytes.
-    pub fn from_bytes(bytes: [u8; 64]) -> Result<ThresholdSignature, ()> {
+    pub fn from_bytes(bytes: [u8; 64]) -> Result<ThresholdSignature, Error> {
         let mut array = [0u8; 32];
 
         array.copy_from_slice(&bytes[..32]);
 
-        let R = CompressedRistretto(array).decompress().ok_or(())?;
+        let R = CompressedRistretto(array).decompress().ok_or(Error::SerialisationError)?;
 
         array.copy_from_slice(&bytes[32..]);
 
-        let z = Scalar::from_canonical_bytes(array).ok_or(())?;
+        let z = Scalar::from_canonical_bytes(array).ok_or(Error::SerialisationError)?;
 
         Ok(ThresholdSignature { R, z })
     }

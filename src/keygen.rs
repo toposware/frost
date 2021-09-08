@@ -212,6 +212,8 @@ use aes::cipher::{
 /// Errors that may happen during Key Generation
 #[derive(Debug, PartialEq)]
 pub enum Error {
+    /// Serialisation error
+    SerialisationError,
     /// Encrypted secret share decryption failure
     DecryptionError,
     /// Secret share verification failure
@@ -231,6 +233,9 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            Error::SerialisationError => {
+                write!(f, "An error happened while deserialising.")
+            },
             Error::DecryptionError => {
                 write!(f, "Could not decrypt encrypted share.")
             },
@@ -266,6 +271,49 @@ pub struct Coefficients(pub(crate) Vec<Scalar>);
 /// verifiable secret sharing scheme.
 #[derive(Clone, Debug)]
 pub struct VerifiableSecretSharingCommitment(pub(crate) Vec<RistrettoPoint>);
+
+impl VerifiableSecretSharingCommitment {
+    /// Serialise this commitment to the secret polynomial coefficients as a Vec of bytes
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut res: Vec<u8> = Vec::with_capacity(self.0.len() * 32);
+        let mut tmp = self
+            .0
+            .iter()
+            .map(|e| e.compress().to_bytes())
+            .collect::<Vec<[u8; 32]>>();
+        res.extend_from_slice(&mut TryInto::<u32>::try_into(tmp.len()).unwrap().to_le_bytes());
+        for elem in tmp.iter_mut() {
+            res.extend_from_slice(elem);
+        }
+
+        res
+    }
+
+    /// Deserialise this slice of bytes to a `VerifiableSecretSharingCommitment`
+    pub fn from_bytes(bytes: &[u8]) -> Result<VerifiableSecretSharingCommitment, Error> {
+        let len = u32::from_le_bytes(
+            bytes[0..4]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?,
+        );
+        let mut points: Vec<RistrettoPoint> =
+            Vec::with_capacity(len as usize);
+        let mut index_slice = 0usize;
+        let mut array = [0u8; 32];
+
+        for _ in 0..len {
+            array.copy_from_slice(&bytes[index_slice..index_slice + 32]);
+            points.push(
+                CompressedRistretto(array)
+                    .decompress()
+                    .ok_or(Error::SerialisationError)?,
+            );
+            index_slice += 32;
+        }
+
+        Ok(VerifiableSecretSharingCommitment(points))
+    }
+}
 
 /// A participant created by a trusted dealer.
 ///
@@ -389,6 +437,73 @@ impl Participant {
             return Some(&self.commitments[0]);
         }
         None
+    }
+
+    /// Serialise this participant to a Vec of bytes
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut res: Vec<u8> = Vec::with_capacity(168 + self.commitments.len() * 32); // 4 + 32 + 4 + len * 32 + 64 + 64
+        res.extend_from_slice(&mut self.index.to_le_bytes());
+        res.extend_from_slice(&mut self.dh_public_key.compress().to_bytes());
+        let mut tmp = self
+            .commitments
+            .iter()
+            .map(|e| e.compress().to_bytes())
+            .collect::<Vec<[u8; 32]>>();
+        res.extend_from_slice(&mut TryInto::<u32>::try_into(tmp.len()).unwrap().to_le_bytes());
+        for elem in tmp.iter_mut() {
+            res.extend_from_slice(elem);
+        }
+        res.extend_from_slice(&mut self.proof_of_secret_key.to_bytes());
+        res.extend_from_slice(&mut self.proof_of_dh_secret_key.to_bytes());
+
+        res
+    }
+
+    /// Deserialise this slice of bytes to a `Participant`
+    pub fn from_bytes(bytes: &[u8]) -> Result<Participant, Error> {
+        let index = u32::from_le_bytes(
+            bytes[0..4]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?,
+        );
+
+        let mut array = [0u8; 32];
+        array.copy_from_slice(&bytes[4..36]);
+
+        let dh_public_key = CompressedRistretto(array)
+            .decompress()
+            .ok_or(Error::SerialisationError)?;
+        let commit_len = u32::from_le_bytes(
+            bytes[36..40]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?,
+        );
+        let mut commitments: Vec<RistrettoPoint> = 
+            Vec::with_capacity(commit_len as usize);
+
+        let mut index_slice = 40 as usize;
+        for _ in 0..commit_len {
+            array.copy_from_slice(&bytes[index_slice..index_slice + 32]);
+            commitments.push(
+                CompressedRistretto(array)
+                    .decompress()
+                    .ok_or(Error::SerialisationError)?,
+            );
+            index_slice += 32;
+        }
+
+        let proof_of_secret_key =
+            NizkOfSecretKey::from_bytes(&bytes[index_slice..index_slice + 64])?;
+        let proof_of_dh_secret_key =
+            NizkOfSecretKey::from_bytes(&bytes[index_slice + 64..index_slice + 128])?;
+
+        Ok(Participant {
+            index,
+            dh_public_key,
+            commitments,
+            proof_of_secret_key,
+            proof_of_dh_secret_key,
+        })
     }
 }
 
@@ -833,6 +948,34 @@ impl SecretShare {
             false => Err(Error::ShareVerificationError),
         }
     }
+
+    /// Serialise this secret share to an array of bytes
+    pub fn to_bytes(&self) -> [u8; 36] {
+        let mut res = [0u8; 36];
+        res[0..4].copy_from_slice(&mut self.index.to_le_bytes());
+        res[4..36].copy_from_slice(&mut self.polynomial_evaluation.to_bytes());
+
+        res
+    }
+
+    /// Deserialise this slice of bytes to a `SecretShare`
+    pub fn from_bytes(bytes: &[u8]) -> Result<SecretShare, Error> {
+        let index = u32::from_le_bytes(
+            bytes[0..4]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?,
+        );
+
+        let mut array = [0u8; 32];
+        array.copy_from_slice(&bytes[4..36]);
+        let polynomial_evaluation = Scalar::from_canonical_bytes(array)
+                .ok_or(Error::SerialisationError)?;
+
+        Ok(SecretShare {
+            index,
+            polynomial_evaluation,
+        })
+    }
 }
 
 
@@ -848,6 +991,41 @@ pub struct EncryptedSecretShare {
     pub(crate) encrypted_polynomial_evaluation: [u8; 32],
 }
 
+impl EncryptedSecretShare {
+    /// Serialise this encrypted secret share to an array of bytes
+    pub fn to_bytes(&self) -> [u8; 40] {
+        let mut res = [0u8; 40];
+        res[0..4].copy_from_slice(&mut self.sender_index.to_le_bytes());
+        res[4..8].copy_from_slice(&mut self.receiver_index.to_le_bytes());
+        res[8..40].copy_from_slice(&mut self.encrypted_polynomial_evaluation.clone());
+
+        res
+    }
+
+    /// Deserialise this slice of bytes to a `EncryptedSecretShare`
+    pub fn from_bytes(bytes: &[u8]) -> Result<EncryptedSecretShare, Error> {
+        let sender_index = u32::from_le_bytes(
+            bytes[0..4]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?,
+        );
+        let receiver_index = u32::from_le_bytes(
+            bytes[4..8]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?,
+        );
+        let encrypted_polynomial_evaluation = bytes[8..40]
+            .try_into()
+            .map_err(|_| Error::SerialisationError)?;
+
+        Ok(EncryptedSecretShare {
+            sender_index,
+            receiver_index,
+            encrypted_polynomial_evaluation,
+        })
+    }
+}
+
 /// A proof that a generated complaint is valid. 
 #[derive(Debug, PartialEq)]
 pub struct ComplaintProof {
@@ -857,6 +1035,38 @@ pub struct ComplaintProof {
     pub a2: RistrettoPoint,
     /// z = r + H(pk_i, pk_l, k_il).sh_i
     pub z: Scalar,
+}
+
+impl ComplaintProof {
+    /// Serialise this complaint proof to an array of bytes
+    pub fn to_bytes(&self) -> [u8; 96] {
+        let mut res = [0u8; 96];
+        res[0..32].copy_from_slice(&mut self.a1.compress().to_bytes());
+        res[32..64].copy_from_slice(&mut self.a2.compress().to_bytes());
+        res[64..96].copy_from_slice(&mut self.z.to_bytes());
+
+        res
+    }
+
+    /// Deserialise this slice of bytes to a `ComplaintProof`
+    pub fn from_bytes(bytes: &[u8]) -> Result<ComplaintProof, Error> {
+        let mut array = [0u8; 32];
+        array.copy_from_slice(&bytes[0..32]);
+        let a1 = CompressedRistretto(array)
+            .decompress()
+            .ok_or(Error::SerialisationError)?;
+
+        array.copy_from_slice(&bytes[32..64]);
+        let a2 = CompressedRistretto(array)
+            .decompress()
+            .ok_or(Error::SerialisationError)?;
+
+        array.copy_from_slice(&bytes[64..96]);
+        let z = Scalar::from_canonical_bytes(array)
+                .ok_or(Error::SerialisationError)?;
+
+        Ok(ComplaintProof { a1, a2, z })
+    }
 }
 
 /// A complaint generated when a participant receives a bad share.
@@ -901,6 +1111,42 @@ impl Complaint {
         }
 
         Ok(())
+    }
+
+    /// Serialise this complaint to an array of bytes
+    pub fn to_bytes(&self) -> [u8; 136] {
+        let mut res = [0u8; 136];
+        res[0..4].copy_from_slice(&mut self.maker_index.to_le_bytes());
+        res[4..8].copy_from_slice(&mut self.accused_index.to_le_bytes());
+        res[8..40].copy_from_slice(&mut self.dh_key.clone());
+        res[40..136].copy_from_slice(&mut self.proof.to_bytes());
+
+        res
+    }
+
+    /// Deserialise this slice of bytes to a `Complaint`
+    pub fn from_bytes(bytes: &[u8]) -> Result<Complaint, Error> {
+        let maker_index = u32::from_le_bytes(
+            bytes[0..4]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?,
+        );
+        let accused_index = u32::from_le_bytes(
+            bytes[4..8]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?,
+        );
+        let dh_key = bytes[8..40]
+            .try_into()
+            .map_err(|_| Error::SerialisationError)?;
+        let proof = ComplaintProof::from_bytes(&bytes[40..136])?;
+
+        Ok(Complaint {
+            maker_index,
+            accused_index,
+            dh_key,
+            proof,
+        })
     }
 }
 
@@ -1110,8 +1356,8 @@ impl GroupKey {
     }
 
     /// Deserialise this group public key from an array of bytes.
-    pub fn from_bytes(bytes: [u8; 32]) -> Result<GroupKey, ()> {
-        let point = CompressedRistretto(bytes).decompress().ok_or(())?;
+    pub fn from_bytes(bytes: [u8; 32]) -> Result<GroupKey, Error> {
+        let point = CompressedRistretto(bytes).decompress().ok_or(Error::SerialisationError)?;
 
         Ok(GroupKey(point))
     }
