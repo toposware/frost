@@ -35,7 +35,7 @@ use sha2::Sha512;
 /// where \\(A\_i = g^{a_i}\\), and using it to compute
 /// \\(s'\_i = \mathcal{H}(i, \phi, A\_i, M'\_i)\\), then finally
 /// \\(s\_i \stackrel{?}{=} s'\_i\\).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NizkOfSecretKey {
     /// The scalar portion of the Schnorr signature encoding the context.
     s: Scalar,

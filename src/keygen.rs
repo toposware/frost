@@ -898,7 +898,7 @@ impl DistributedKeyGeneration<RoundOne> {
 
 /// A secret share calculated by evaluating a polynomial with secret
 /// coefficients for some indeterminant.
-#[derive(Clone, Debug, Zeroize)]
+#[derive(Clone, Debug, Eq, PartialEq, Zeroize)]
 #[zeroize(drop)]
 pub struct SecretShare {
     /// The participant index that this secret share was calculated for.
@@ -980,7 +980,7 @@ impl SecretShare {
 
 
 /// A secret share encrypted with a participant's public key
-#[derive(Clone, Debug, Zeroize)]
+#[derive(Clone, Debug, Eq, PartialEq, Zeroize)]
 #[zeroize(drop)]
 pub struct EncryptedSecretShare {
     /// The index of the share maker.
@@ -1886,6 +1886,131 @@ mod test {
                 Err(())
             }
         }
+        assert!(do_test().is_ok());
+    }
+
+    #[test]
+    fn serialisation() {
+        fn do_test() -> Result<(), ()> {
+            let params = Parameters { n: 3, t: 2 };
+
+            let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, 1, "Φ");
+            let (p2, p2coeffs, p2_dh_sk) = Participant::new(&params, 2, "Φ");
+            let (p3, p3coeffs, p3_dh_sk) = Participant::new(&params, 3, "Φ");
+
+            p1.proof_of_secret_key.verify(&p1.index, &p1.public_key().unwrap(), "Φ").or(Err(()))?;
+            p2.proof_of_secret_key.verify(&p2.index, &p2.public_key().unwrap(), "Φ").or(Err(()))?;
+            p3.proof_of_secret_key.verify(&p3.index, &p3.public_key().unwrap(), "Φ").or(Err(()))?;
+
+            let mut p1_other_participants: Vec<Participant> = vec!(p2.clone(), p3.clone());
+            let p1_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+                                                                     &p1_dh_sk,
+                                                                     &p1.index,
+                                                                     &p1coeffs,
+                                                                     &mut p1_other_participants,
+                                                                     "Φ").or(Err(()))?;
+            let p1_their_encrypted_secret_shares = p1_state.their_encrypted_secret_shares()?;
+
+            let mut p2_other_participants: Vec<Participant> = vec!(p1.clone(), p3.clone());
+            let p2_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+                                                                     &p2_dh_sk,
+                                                                     &p2.index,
+                                                                     &p2coeffs,
+                                                                     &mut p2_other_participants,
+                                                                     "Φ").or(Err(()))?;
+            let p2_their_encrypted_secret_shares = p2_state.their_encrypted_secret_shares()?;
+
+            let mut p3_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone());
+            let  p3_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+                                                                      &p3_dh_sk,
+                                                                      &p3.index,
+                                                                      &p3coeffs,
+                                                                      &mut p3_other_participants,
+                                                                      "Φ").or(Err(()))?;
+            let p3_their_encrypted_secret_shares = p3_state.their_encrypted_secret_shares()?;
+
+            {
+                let p1_my_encrypted_secret_shares = vec!(p2_their_encrypted_secret_shares[0].clone(),
+                                               p3_their_encrypted_secret_shares[0].clone());
+                let p2_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[0].clone(),
+                                               p3_their_encrypted_secret_shares[1].clone());
+                let p3_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[1].clone(),
+                                               p2_their_encrypted_secret_shares[1].clone());
+
+                // Check serialisation
+
+                let bytes = p1.to_bytes();
+                assert_eq!(p1, Participant::from_bytes(&bytes).unwrap());
+
+                let bytes = p1.proof_of_secret_key.to_bytes();
+                assert_eq!(p1.proof_of_secret_key, NizkOfSecretKey::from_bytes(&bytes).unwrap());
+
+                let bytes = p1_state.their_encrypted_secret_shares().unwrap()[0].to_bytes();
+                assert_eq!(p1_state.their_encrypted_secret_shares().unwrap()[0], EncryptedSecretShare::from_bytes(&bytes).unwrap());
+
+                // Continue KeyGen
+
+                let p1_state = p1_state.clone().to_round_two(p1_my_encrypted_secret_shares).or(Err(()))?;
+                let p2_state = p2_state.clone().to_round_two(p2_my_encrypted_secret_shares).or(Err(()))?;
+                let p3_state = p3_state.clone().to_round_two(p3_my_encrypted_secret_shares).or(Err(()))?;
+
+                let (p1_group_key, _p1_secret_key) = p1_state.finish(p1.public_key().unwrap()).or(Err(()))?;
+                let (p2_group_key, _p2_secret_key) = p2_state.finish(p2.public_key().unwrap()).or(Err(()))?;
+                let (p3_group_key, _p3_secret_key) = p3_state.finish(p3.public_key().unwrap()).or(Err(()))?;
+
+                assert!(p1_group_key.0.compress() == p2_group_key.0.compress());
+                assert!(p2_group_key.0.compress() == p3_group_key.0.compress());
+
+                // Check serialisation
+
+                let bytes = p1_group_key.to_bytes();
+                assert_eq!(p1_group_key, GroupKey::from_bytes(bytes).unwrap());
+            }
+
+            {
+                let wrong_encrypted_secret_share = EncryptedSecretShare {sender_index: 1,
+                                                                         receiver_index: 2,
+                                                                         encrypted_polynomial_evaluation: [0; 32]};
+
+                let p1_my_encrypted_secret_shares = vec!(p2_their_encrypted_secret_shares[0].clone(),
+                                               p3_their_encrypted_secret_shares[0].clone());
+                let p2_my_encrypted_secret_shares = vec!(wrong_encrypted_secret_share.clone(),
+                                               p3_their_encrypted_secret_shares[1].clone());
+                let p3_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[1].clone(),
+                                               p2_their_encrypted_secret_shares[1].clone());
+
+                let p1_state = p1_state.to_round_two(p1_my_encrypted_secret_shares).or(Err(()))?;
+                let p3_state = p3_state.to_round_two(p3_my_encrypted_secret_shares).or(Err(()))?;
+
+                let complaints = p2_state.to_round_two(p2_my_encrypted_secret_shares);
+                assert!(complaints.is_err());
+                let complaints = complaints.unwrap_err();
+                if let Error::Complaint(complaints) = complaints {
+                    assert!(complaints.len() == 1);
+
+                    let bad_index = p3_state.blame(&wrong_encrypted_secret_share, &complaints[0]);
+                    assert!(bad_index == 1);
+
+                    let (p1_group_key, _p1_secret_key) = p1_state.finish(p1.public_key().unwrap()).or(Err(()))?;
+                    let (p3_group_key, _p3_secret_key) = p3_state.finish(p3.public_key().unwrap()).or(Err(()))?;
+
+                    assert!(p1_group_key.0.compress() == p3_group_key.0.compress());
+
+                    // Check serialisation
+
+                    let bytes = complaints[0].proof.to_bytes();
+                    assert_eq!(complaints[0].proof, ComplaintProof::from_bytes(&bytes).unwrap());
+
+                    let bytes = complaints[0].to_bytes();
+                    assert_eq!(complaints[0], Complaint::from_bytes(&bytes).unwrap());
+
+                    Ok(())
+                } else {
+                    Err(())
+                }
+            }
+        }
+
         assert!(do_test().is_ok());
     }
 }

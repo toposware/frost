@@ -79,7 +79,7 @@ impl PartialEq for Signer {
 
 /// A partially-constructed threshold signature, made by each participant in the
 /// signing protocol during the first phase of a signature creation.
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct PartialThresholdSignature {
     pub(crate) index: u32,
     pub(crate) z: Scalar,
@@ -113,7 +113,7 @@ impl PartialThresholdSignature {
 }
 
 /// A complete, aggregated threshold signature.
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct ThresholdSignature {
     pub(crate) R: RistrettoPoint,
     pub(crate) z: Scalar,
@@ -687,7 +687,7 @@ mod test {
 
     use crate::keygen::Participant;
     use crate::keygen::{DistributedKeyGeneration, RoundOne};
-    use crate::precomputation::generate_commitment_share_lists;
+    use crate::precomputation::{generate_commitment_share_lists, PublicCommitmentShareList};
 
     use curve25519_dalek::traits::Identity;
 
@@ -1093,5 +1093,118 @@ mod test {
         // Same for participant 2.
         assert!(signers[1].published_commitment_share.0 == p2_public_comshares.commitments[0].0);
         assert!(signers[1].published_commitment_share.1 == p2_public_comshares.commitments[0].1);
+    }
+
+    #[test]
+    fn serialisation() {
+        fn do_keygen() -> Result<(Parameters, SecretKey, SecretKey, SecretKey, GroupKey), ()> {
+            let params = Parameters { n: 3, t: 2 };
+
+            let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, 1, "Φ");
+            let (p2, p2coeffs, p2_dh_sk) = Participant::new(&params, 2, "Φ");
+            let (p3, p3coeffs, p3_dh_sk) = Participant::new(&params, 3, "Φ");
+
+            p2.proof_of_secret_key.verify(&p2.index, &p2.commitments[0], "Φ")?;
+            p3.proof_of_secret_key.verify(&p3.index, &p3.commitments[0], "Φ")?;
+
+            let mut p1_other_participants: Vec<Participant> = vec!(p2.clone(), p3.clone());
+            let p1_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+                                                                     &p1_dh_sk,
+                                                                     &p1.index,
+                                                                     &p1coeffs,
+                                                                     &mut p1_other_participants,
+                                                                     "Φ").or(Err(()))?;
+            let p1_their_encrypted_secret_shares = p1_state.their_encrypted_secret_shares()?;
+
+            let mut p2_other_participants: Vec<Participant> = vec!(p1.clone(), p3.clone());
+            let p2_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+                                                                     &p2_dh_sk,
+                                                                     &p2.index,
+                                                                     &p2coeffs,
+                                                                     &mut p2_other_participants,
+                                                                     "Φ").or(Err(()))?;
+            let p2_their_encrypted_secret_shares = p2_state.their_encrypted_secret_shares()?;
+
+            let mut p3_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone());
+            let  p3_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+                                                                      &p3_dh_sk,
+                                                                      &p3.index,
+                                                                      &p3coeffs,
+                                                                      &mut p3_other_participants,
+                                                                      "Φ").or(Err(()))?;
+            let p3_their_encrypted_secret_shares = p3_state.their_encrypted_secret_shares()?;
+
+            let p1_my_encrypted_secret_shares = vec!(p2_their_encrypted_secret_shares[0].clone(), // XXX FIXME indexing
+                                           p3_their_encrypted_secret_shares[0].clone());
+            let p2_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[0].clone(),
+                                           p3_their_encrypted_secret_shares[1].clone());
+            let p3_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[1].clone(),
+                                           p2_their_encrypted_secret_shares[1].clone());
+
+            let p1_state = p1_state.to_round_two(p1_my_encrypted_secret_shares).or(Err(()))?;
+            let p2_state = p2_state.to_round_two(p2_my_encrypted_secret_shares).or(Err(()))?;
+            let p3_state = p3_state.to_round_two(p3_my_encrypted_secret_shares).or(Err(()))?;
+
+            let (p1_group_key, p1_secret_key) = p1_state.finish(p1.public_key().unwrap()).or(Err(()))?;
+            let (p2_group_key, p2_secret_key) = p2_state.finish(p2.public_key().unwrap()).or(Err(()))?;
+            let (p3_group_key, p3_secret_key) = p3_state.finish(p3.public_key().unwrap()).or(Err(()))?;
+
+            assert!(p1_group_key.0.compress() == p2_group_key.0.compress());
+            assert!(p2_group_key.0.compress() == p3_group_key.0.compress());
+
+            Ok((params, p1_secret_key, p2_secret_key, p3_secret_key, p1_group_key))
+        }
+        let keygen_protocol = do_keygen();
+
+        assert!(keygen_protocol.is_ok());
+
+        let (params, p1_sk, p2_sk, _p3_sk, group_key) = keygen_protocol.unwrap();
+
+        let context = b"CONTEXT STRING STOLEN FROM DALEK TEST SUITE";
+        let message = b"This is a test of the tsunami alert system. This is only a test.";
+        let (p1_public_comshares, mut p1_secret_comshares) = generate_commitment_share_lists(&mut OsRng, 1, 1);
+        let (p2_public_comshares, mut p2_secret_comshares) = generate_commitment_share_lists(&mut OsRng, 2, 1);
+
+        let mut aggregator = SignatureAggregator::new(params, group_key, &context[..], &message[..]);
+
+        aggregator.include_signer(1, p1_public_comshares.commitments[0], (&p1_sk).into());
+        aggregator.include_signer(2, p2_public_comshares.commitments[0], (&p2_sk).into());
+
+        let signers = aggregator.get_signers();
+        let message_hash = compute_message_hash(&context[..], &message[..]);
+
+        let p1_partial = p1_sk.sign(&message_hash, &group_key, &mut p1_secret_comshares, 0, signers).unwrap();
+        let p2_partial = p2_sk.sign(&message_hash, &group_key, &mut p2_secret_comshares, 0, signers).unwrap();
+
+        // Check serialisation
+
+        let bytes = p1_public_comshares.to_bytes();
+        assert_eq!(p1_public_comshares, PublicCommitmentShareList::from_bytes(&bytes).unwrap());
+
+        let bytes = p1_partial.to_bytes();
+        assert_eq!(p1_partial, PartialThresholdSignature::from_bytes(bytes).unwrap());
+
+        // Continue signature
+
+        aggregator.include_partial_signature(p1_partial);
+        aggregator.include_partial_signature(p2_partial);
+
+        let aggregator = aggregator.finalize().unwrap();
+        let signing_result = aggregator.aggregate();
+
+        assert!(signing_result.is_ok());
+
+        let threshold_signature = signing_result.unwrap();
+        let verification_result = threshold_signature.verify(&group_key, &message_hash);
+
+        println!("{:?}", verification_result);
+
+        assert!(verification_result.is_ok());
+
+        // Check serialisation
+
+        let bytes = threshold_signature.to_bytes();
+        assert_eq!(threshold_signature, ThresholdSignature::from_bytes(bytes).unwrap());
+
     }
 }
