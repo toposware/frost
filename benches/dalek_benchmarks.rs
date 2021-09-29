@@ -20,6 +20,7 @@ use frost_dalek::compute_message_hash;
 use frost_dalek::generate_commitment_share_lists;
 use frost_dalek::keygen::{
     Coefficients,
+    DHPrivateKey,
     EncryptedSecretShare,
 };
 use frost_dalek::DistributedKeyGeneration;
@@ -31,8 +32,6 @@ use frost_dalek::precomputation::{
     SecretCommitmentShareList,
 };
 use frost_dalek::SignatureAggregator;
-
-use curve25519_dalek::scalar::Scalar;
 
 const NUMBER_OF_PARTICIPANTS: u32 = 5;
 const THRESHOLD_OF_PARTICIPANTS: u32 = 3;
@@ -71,7 +70,7 @@ mod dkg_benches {
 
         let mut participants = Vec::<Participant>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
         let mut coefficients = Vec::<Coefficients>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
-        let mut dh_secret_keys = Vec::<Scalar>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
+        let mut dh_secret_keys = Vec::<DHPrivateKey>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
 
         for i in 1..NUMBER_OF_PARTICIPANTS+1 {
             let (p, c, dh_sk) = Participant::new(&params, i, "Φ");
@@ -114,7 +113,7 @@ mod dkg_benches {
 
         let mut participants = Vec::<Participant>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
         let mut coefficients = Vec::<Coefficients>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
-        let mut dh_secret_keys = Vec::<Scalar>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
+        let mut dh_secret_keys = Vec::<DHPrivateKey>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
 
         for i in 1..NUMBER_OF_PARTICIPANTS+1 {
             let (p, c, dh_sk) = Participant::new(&params, i, "Φ");
@@ -175,7 +174,7 @@ mod sign_benches {
 
         let mut participants = Vec::<Participant>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
         let mut coefficients = Vec::<Coefficients>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
-        let mut dh_secret_keys = Vec::<Scalar>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
+        let mut dh_secret_keys = Vec::<DHPrivateKey>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
 
         for i in 1..NUMBER_OF_PARTICIPANTS+1 {
             let (p, c, dh_sk) = Participant::new(&params, i, "Φ");
@@ -267,7 +266,7 @@ mod sign_benches {
 
         let mut participants = Vec::<Participant>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
         let mut coefficients = Vec::<Coefficients>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
-        let mut dh_secret_keys = Vec::<Scalar>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
+        let mut dh_secret_keys = Vec::<DHPrivateKey>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
 
         for i in 1..NUMBER_OF_PARTICIPANTS+1 {
             let (p, c, dh_sk) = Participant::new(&params, i, "Φ");
@@ -369,7 +368,7 @@ mod sign_benches {
 
         let mut participants = Vec::<Participant>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
         let mut coefficients = Vec::<Coefficients>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
-        let mut dh_secret_keys = Vec::<Scalar>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
+        let mut dh_secret_keys = Vec::<DHPrivateKey>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
 
         for i in 1..NUMBER_OF_PARTICIPANTS+1 {
             let (p, c, dh_sk) = Participant::new(&params, i, "Φ");
