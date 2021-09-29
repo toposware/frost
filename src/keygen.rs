@@ -267,6 +267,48 @@ impl fmt::Display for Error {
 #[zeroize(drop)]
 pub struct Coefficients(pub(crate) Vec<Scalar>);
 
+impl Coefficients {
+    /// Serialise these coefficients as a Vec of bytes
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut res: Vec<u8> = Vec::with_capacity(self.0.len() * 32 + 4);
+        let mut tmp = self
+            .0
+            .iter()
+            .map(|e| e.to_bytes())
+            .collect::<Vec<[u8; 32]>>();
+        res.extend_from_slice(&mut TryInto::<u32>::try_into(tmp.len()).unwrap().to_le_bytes());
+        for elem in tmp.iter_mut() {
+            res.extend_from_slice(elem);
+        }
+
+        res
+    }
+
+    /// Deserialise this slice of bytes to a `Coefficients`
+    pub fn from_bytes(bytes: &[u8]) -> Result<Coefficients, Error> {
+        let len = u32::from_le_bytes(
+            bytes[0..4]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?,
+        );
+        let mut points: Vec<Scalar> =
+            Vec::with_capacity(len as usize);
+        let mut index_slice = 4usize;
+        let mut array = [0u8; 32];
+
+        for _ in 0..len {
+            array.copy_from_slice(&bytes[index_slice..index_slice + 32]);
+            points.push(
+                Scalar::from_canonical_bytes(array)
+                    .ok_or(Error::SerialisationError)?,
+            );
+            index_slice += 32;
+        }
+
+        Ok(Coefficients(points))
+    }
+}
+
 /// A commitment to the dealer's secret polynomial coefficients for Feldman's
 /// verifiable secret sharing scheme.
 #[derive(Clone, Debug)]
@@ -1941,6 +1983,13 @@ mod test {
 
                 let bytes = p1.to_bytes();
                 assert_eq!(p1, Participant::from_bytes(&bytes).unwrap());
+
+                let bytes = p1coeffs.to_bytes();
+                let p1coeffs_deserialised = Coefficients::from_bytes(&bytes).unwrap();
+                assert_eq!(p1coeffs.0.len(), p1coeffs_deserialised.0.len());
+                for i in 0..p1coeffs.0.len() {
+                    assert_eq!(p1coeffs.0[i], p1coeffs_deserialised.0[i]);
+                }
 
                 let bytes = p1.proof_of_secret_key.to_bytes();
                 assert_eq!(p1.proof_of_secret_key, NizkOfSecretKey::from_bytes(&bytes).unwrap());
