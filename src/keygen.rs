@@ -317,7 +317,7 @@ pub struct VerifiableSecretSharingCommitment(pub(crate) Vec<RistrettoPoint>);
 impl VerifiableSecretSharingCommitment {
     /// Serialise this commitment to the secret polynomial coefficients as a Vec of bytes
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut res: Vec<u8> = Vec::with_capacity(self.0.len() * 32);
+        let mut res: Vec<u8> = Vec::with_capacity(self.0.len() * 32 + 4);
         let mut tmp = self
             .0
             .iter()
@@ -340,7 +340,7 @@ impl VerifiableSecretSharingCommitment {
         );
         let mut points: Vec<RistrettoPoint> =
             Vec::with_capacity(len as usize);
-        let mut index_slice = 0usize;
+        let mut index_slice = 4usize;
         let mut array = [0u8; 32];
 
         for _ in 0..len {
