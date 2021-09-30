@@ -184,6 +184,7 @@ use std::string::{String, ToString};
 use core::convert::TryInto;
 use core::fmt;
 use core::cmp::Ordering;
+use core::ops::Deref;
 
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_TABLE;
 use curve25519_dalek::ristretto::CompressedRistretto;
@@ -267,6 +268,48 @@ impl fmt::Display for Error {
 #[zeroize(drop)]
 pub struct Coefficients(pub(crate) Vec<Scalar>);
 
+impl Coefficients {
+    /// Serialise these coefficients as a Vec of bytes
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut res: Vec<u8> = Vec::with_capacity(self.0.len() * 32 + 4);
+        let mut tmp = self
+            .0
+            .iter()
+            .map(|e| e.to_bytes())
+            .collect::<Vec<[u8; 32]>>();
+        res.extend_from_slice(&mut TryInto::<u32>::try_into(tmp.len()).unwrap().to_le_bytes());
+        for elem in tmp.iter_mut() {
+            res.extend_from_slice(elem);
+        }
+
+        res
+    }
+
+    /// Deserialise this slice of bytes to a `Coefficients`
+    pub fn from_bytes(bytes: &[u8]) -> Result<Coefficients, Error> {
+        let len = u32::from_le_bytes(
+            bytes[0..4]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?,
+        );
+        let mut points: Vec<Scalar> =
+            Vec::with_capacity(len as usize);
+        let mut index_slice = 4usize;
+        let mut array = [0u8; 32];
+
+        for _ in 0..len {
+            array.copy_from_slice(&bytes[index_slice..index_slice + 32]);
+            points.push(
+                Scalar::from_canonical_bytes(array)
+                    .ok_or(Error::SerialisationError)?,
+            );
+            index_slice += 32;
+        }
+
+        Ok(Coefficients(points))
+    }
+}
+
 /// A commitment to the dealer's secret polynomial coefficients for Feldman's
 /// verifiable secret sharing scheme.
 #[derive(Clone, Debug)]
@@ -275,7 +318,7 @@ pub struct VerifiableSecretSharingCommitment(pub(crate) Vec<RistrettoPoint>);
 impl VerifiableSecretSharingCommitment {
     /// Serialise this commitment to the secret polynomial coefficients as a Vec of bytes
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut res: Vec<u8> = Vec::with_capacity(self.0.len() * 32);
+        let mut res: Vec<u8> = Vec::with_capacity(self.0.len() * 32 + 4);
         let mut tmp = self
             .0
             .iter()
@@ -298,7 +341,7 @@ impl VerifiableSecretSharingCommitment {
         );
         let mut points: Vec<RistrettoPoint> =
             Vec::with_capacity(len as usize);
-        let mut index_slice = 0usize;
+        let mut index_slice = 4usize;
         let mut array = [0u8; 32];
 
         for _ in 0..len {
@@ -312,6 +355,37 @@ impl VerifiableSecretSharingCommitment {
         }
 
         Ok(VerifiableSecretSharingCommitment(points))
+    }
+}
+
+/// A Diffie-Hellman secret key wrapper type around a Scalar
+#[derive(Clone, Debug, Eq, PartialEq, Zeroize)]
+#[zeroize(drop)]
+pub struct DHPrivateKey(pub(crate) Scalar);
+
+impl DHPrivateKey {
+    /// Serialise this commitment to the secret polynomial coefficients as an array of bytes
+    pub fn to_bytes(&self) -> [u8; 32] {
+        self.0.to_bytes()
+    }
+
+    /// Deserialise this slice of bytes to a `DHPrivateKey`
+    pub fn from_bytes(bytes: &[u8]) -> Result<DHPrivateKey, Error> {
+        let mut array = [0u8; 32];
+        array.copy_from_slice(&bytes[..32]);
+
+        let scalar = Scalar::from_canonical_bytes(array)
+            .ok_or(Error::SerialisationError)?;
+
+        Ok(DHPrivateKey(scalar))
+    }
+}
+
+impl Deref for DHPrivateKey {
+    type Target = Scalar;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -343,9 +417,9 @@ pub struct Participant {
     /// first coefficient in the private polynomial).  It is constructed as a
     /// Schnorr signature using \\( a_{i0} \\) as the signing key.
     pub proof_of_secret_key: NizkOfSecretKey,
-    /// The zero-knowledge proof of knowledge of the DH secret key.
+    /// The zero-knowledge proof of knowledge of the DH private key.
     /// It is computed similarly to the proof_of_secret_key.
-    pub proof_of_dh_secret_key: NizkOfSecretKey,
+    pub proof_of_dh_private_key: NizkOfSecretKey,
 }
 
 impl Participant {
@@ -384,7 +458,7 @@ impl Participant {
     /// A distributed key generation protocol [`Participant`] and that
     /// participant's secret polynomial `Coefficients` which must be kept
     /// private, along the participant Diffie-Hellman secret key for secret shares encryption.
-    pub fn new(parameters: &Parameters, index: u32, context_string: &str) -> (Self, Coefficients, Scalar) {
+    pub fn new(parameters: &Parameters, index: u32, context_string: &str) -> (Self, Coefficients, DHPrivateKey) {
         // Step 1: Every participant P_i samples t random values (a_{i0}, ..., a_{i(t-1)})
         //         uniformly in ZZ_q, and uses these values as coefficients to define a
         //         polynomial f_i(x) = \sum_{j=0}^{t-1} a_{ij} x^{j} of degree t-1 over
@@ -400,15 +474,15 @@ impl Participant {
 
         let coefficients = Coefficients(coefficients);
 
-        // RICE-FROST: Every participant samples a random pair of keys (dh_secret_key, dh_public_key)
-        // and generates a proof of knowledge of dh_secret_key. This will be used for secret shares
+        // RICE-FROST: Every participant samples a random pair of keys (dh_private_key, dh_public_key)
+        // and generates a proof of knowledge of dh_private_key. This will be used for secret shares
         // encryption and for complaint generation.
 
-        let dh_secret_key = Scalar::random(&mut rng);
-        let dh_public_key = &RISTRETTO_BASEPOINT_TABLE * &dh_secret_key;
+        let dh_private_key = DHPrivateKey(Scalar::random(&mut rng));
+        let dh_public_key = &RISTRETTO_BASEPOINT_TABLE * &dh_private_key;
 
         // Compute a proof of knowledge of dh_secret_key
-        let proof_of_dh_secret_key: NizkOfSecretKey = NizkOfSecretKey::prove(&index, &dh_secret_key, &dh_public_key, &context_string, rng);
+        let proof_of_dh_private_key: NizkOfSecretKey = NizkOfSecretKey::prove(&index, &dh_private_key, &dh_public_key, &context_string, rng);
 
         // Step 3: Every participant P_i computes a public commitment
         //         C_i = [\phi_{i0}, ..., \phi_{i(t-1)}], where \phi_{ij} = g^{a_{ij}},
@@ -426,7 +500,7 @@ impl Participant {
         let proof_of_secret_key: NizkOfSecretKey = NizkOfSecretKey::prove(&index, &coefficients.0[0], &commitments[0], &context_string, rng);
 
         // Step 4: Every participant P_i broadcasts C_i, \alpha_i to all other participants.
-        (Participant { index, dh_public_key, commitments, proof_of_secret_key, proof_of_dh_secret_key }, coefficients, dh_secret_key)
+        (Participant { index, dh_public_key, commitments, proof_of_secret_key, proof_of_dh_private_key }, coefficients, dh_private_key)
     }
 
     /// Retrieve \\( \alpha_{i0} * B \\), where \\( B \\) is the Ristretto basepoint.
@@ -454,7 +528,7 @@ impl Participant {
             res.extend_from_slice(elem);
         }
         res.extend_from_slice(&mut self.proof_of_secret_key.to_bytes());
-        res.extend_from_slice(&mut self.proof_of_dh_secret_key.to_bytes());
+        res.extend_from_slice(&mut self.proof_of_dh_private_key.to_bytes());
 
         res
     }
@@ -494,7 +568,7 @@ impl Participant {
 
         let proof_of_secret_key =
             NizkOfSecretKey::from_bytes(&bytes[index_slice..index_slice + 64])?;
-        let proof_of_dh_secret_key =
+        let proof_of_dh_private_key =
             NizkOfSecretKey::from_bytes(&bytes[index_slice + 64..index_slice + 128])?;
 
         Ok(Participant {
@@ -502,7 +576,7 @@ impl Participant {
             dh_public_key,
             commitments,
             proof_of_secret_key,
-            proof_of_dh_secret_key,
+            proof_of_dh_private_key,
         })
     }
 }
@@ -588,7 +662,7 @@ struct ActualState {
     parameters: Parameters,
     /// The DH private key for deriving a symmetric key to encrypt and decrypt
     /// secret shares.
-    dh_private_key: Scalar,
+    dh_private_key: DHPrivateKey,
     /// The DH public key for deriving a symmetric key to encrypt and decrypt
     /// secret shares.
     dh_public_key: RistrettoPoint,
@@ -712,7 +786,7 @@ impl DistributedKeyGeneration<RoundOne> {
     /// vector of participants whose zero-knowledge proofs were incorrect.
     pub fn new(
         parameters: &Parameters,
-        dh_private_key: &Scalar,
+        dh_private_key: &DHPrivateKey,
         my_index: &u32,
         my_coefficients: &Coefficients,
         other_participants: &mut Vec<Participant>,
@@ -723,7 +797,7 @@ impl DistributedKeyGeneration<RoundOne> {
         let mut their_dh_public_keys: Vec<(u32, RistrettoPoint)> = Vec::with_capacity(parameters.t as usize);
         let mut misbehaving_participants: Vec<u32> = Vec::new();
 
-        let dh_public_key = &RISTRETTO_BASEPOINT_TABLE * dh_private_key;
+        let dh_public_key = &RISTRETTO_BASEPOINT_TABLE * &dh_private_key;
 
         // Bail if we didn't get enough participants.
         if other_participants.len() != parameters.n as usize - 1 {
@@ -747,7 +821,7 @@ impl DistributedKeyGeneration<RoundOne> {
                             their_commitments.push((p.index, VerifiableSecretSharingCommitment(p.commitments.clone())));
                             their_dh_public_keys.push((p.index, p.dh_public_key));
 
-                            match p.proof_of_dh_secret_key.verify(&p.index, &p.dh_public_key, &context_string) {
+                            match p.proof_of_dh_private_key.verify(&p.index, &p.dh_public_key, &context_string) {
                                 Ok(_)  => (),
                                 Err(_) => misbehaving_participants.push(p.index),
                             }
@@ -774,7 +848,7 @@ impl DistributedKeyGeneration<RoundOne> {
         for p in other_participants.iter() {
             let share = SecretShare::evaluate_polynomial(&p.index, my_coefficients);
 
-            let dh_key = (p.dh_public_key * dh_private_key).compress().to_bytes();
+            let dh_key = (p.dh_public_key * dh_private_key.0).compress().to_bytes();
 
             their_encrypted_secret_shares.push(encrypt_share(my_index, &share, &dh_key));
         }
@@ -782,7 +856,7 @@ impl DistributedKeyGeneration<RoundOne> {
         let my_secret_share = SecretShare::evaluate_polynomial(my_index, my_coefficients);
         let state = ActualState {
             parameters: *parameters,
-            dh_private_key: *dh_private_key,
+            dh_private_key: dh_private_key.clone(),
             dh_public_key,
             their_commitments,
             their_dh_public_keys,
@@ -835,7 +909,7 @@ impl DistributedKeyGeneration<RoundOne> {
         for encrypted_share in my_encrypted_secret_shares.iter(){
             for pk in self.state.their_dh_public_keys.iter(){
                 if pk.0 == encrypted_share.sender_index {
-                    let dh_key = (pk.1 * self.state.dh_private_key).compress().to_bytes();
+                    let dh_key = (pk.1 * self.state.dh_private_key.0).compress().to_bytes();
 
                     // Step 2.2: Each share is verified by calculating:
                     //           g^{f_l(i)} ?= \Prod_{k=0}^{t-1} \phi_{lk}^{i^{k} mod q},
@@ -868,7 +942,7 @@ impl DistributedKeyGeneration<RoundOne> {
                                         proof: ComplaintProof {
                                             a1: &RISTRETTO_BASEPOINT_TABLE * &r,
                                             a2: pk.1 * r,
-                                            z: r + h * self.state.dh_private_key,
+                                            z: r + h * self.state.dh_private_key.0,
                                         }
                                     }
                                 );
@@ -1941,6 +2015,16 @@ mod test {
 
                 let bytes = p1.to_bytes();
                 assert_eq!(p1, Participant::from_bytes(&bytes).unwrap());
+
+                let bytes = p1coeffs.to_bytes();
+                let p1coeffs_deserialised = Coefficients::from_bytes(&bytes).unwrap();
+                assert_eq!(p1coeffs.0.len(), p1coeffs_deserialised.0.len());
+                for i in 0..p1coeffs.0.len() {
+                    assert_eq!(p1coeffs.0[i], p1coeffs_deserialised.0[i]);
+                }
+
+                let bytes = p1_dh_sk.to_bytes();
+                assert_eq!(p1_dh_sk, DHPrivateKey::from_bytes(&bytes).unwrap());
 
                 let bytes = p1.proof_of_secret_key.to_bytes();
                 assert_eq!(p1.proof_of_secret_key, NizkOfSecretKey::from_bytes(&bytes).unwrap());
