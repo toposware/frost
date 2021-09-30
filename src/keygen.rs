@@ -966,6 +966,34 @@ impl DistributedKeyGeneration<RoundOne> {
             data: RoundTwo {},
         })
     }
+
+    /// Test-purpose only function for benchmarking complaint generation
+    pub fn test_complaint(
+        &self,
+        our_dh_secret_key_bytes: [u8; 32],
+        their_public_key: RistrettoPoint) -> Complaint
+    {
+        let mut rng: OsRng = OsRng;
+        let r = Scalar::random(&mut rng);
+
+        let mut h = Sha512::new();
+        h.update(self.state.dh_public_key.compress().to_bytes());
+        h.update(their_public_key.compress().to_bytes());
+        h.update(our_dh_secret_key_bytes);
+
+        let h = Scalar::from_hash(h);
+        
+        Complaint {
+            maker_index: 17,
+            accused_index: 42,
+            dh_key: our_dh_secret_key_bytes,
+            proof: ComplaintProof {
+                a1: &RISTRETTO_BASEPOINT_TABLE * &r,
+                a2: their_public_key * r,
+                z: r + h * self.state.dh_private_key.0,
+            }
+        }
+    }
 }
 
 /// A secret share calculated by evaluating a polynomial with secret
@@ -1062,7 +1090,7 @@ pub struct EncryptedSecretShare {
     /// The nonce to be used for decryption with AES-CTR mode.
     pub nonce: [u8; 16],
     /// The encrypted polynomial evaluation.
-    pub(crate) encrypted_polynomial_evaluation: [u8; 32],
+    pub encrypted_polynomial_evaluation: [u8; 32],
 }
 
 impl EncryptedSecretShare {
