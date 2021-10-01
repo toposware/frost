@@ -314,7 +314,7 @@ impl Coefficients {
 
 /// A commitment to the dealer's secret polynomial coefficients for Feldman's
 /// verifiable secret sharing scheme.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VerifiableSecretSharingCommitment(pub(crate) Vec<RistrettoPoint>);
 
 impl VerifiableSecretSharingCommitment {
@@ -686,7 +686,7 @@ pub struct DistributedKeyGeneration<S: DkgState> {
 }
 
 /// Shared state which occurs across all rounds of a threshold signing protocol run.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct ActualState {
     /// The parameters for this instantiation of a threshold signature.
     parameters: Parameters,
@@ -709,6 +709,186 @@ struct ActualState {
     their_encrypted_secret_shares: Option<Vec<EncryptedSecretShare>>,
     /// The secret shares this participant has received from all the other participants.
     my_secret_shares: Option<Vec<SecretShare>>,
+}
+
+impl ActualState {
+    /// Serialise this state to a Vec of bytes
+    fn to_bytes(&self) -> Vec<u8> {
+        let mut res: Vec<u8> = Vec::new();
+        res.extend_from_slice(&mut self.parameters.to_bytes());
+        res.extend_from_slice(&mut self.dh_private_key.to_bytes());
+        res.extend_from_slice(&mut self.dh_public_key.to_bytes());
+        let mut tmp = self
+            .their_commitments
+            .iter()
+            .map(|e| (e.0.to_le_bytes(), e.1.to_bytes()))
+            .collect::<Vec<([u8; 4], Vec<u8>)>>();
+        res.extend_from_slice(&mut TryInto::<u32>::try_into(tmp.len()).unwrap().to_le_bytes());
+        for (index, commitments) in tmp.iter_mut() {
+            res.extend_from_slice(index);
+            res.extend_from_slice(commitments);
+        }
+        let mut tmp = self
+            .their_dh_public_keys
+            .iter()
+            .map(|e| (e.0.to_le_bytes(), e.1.to_bytes()))
+            .collect::<Vec<([u8; 4], [u8; 32])>>();
+        res.extend_from_slice(&mut TryInto::<u32>::try_into(tmp.len()).unwrap().to_le_bytes());
+        for (index, keys) in tmp.iter_mut() {
+            res.extend_from_slice(index);
+            res.extend_from_slice(keys);
+        }
+        res.extend_from_slice(&mut self.my_secret_share.to_bytes());
+        match &self.their_encrypted_secret_shares {
+            Some(v) => {
+                res.push(1u8);
+                let mut tmp = v.iter()
+                    .map(|e| e.to_bytes())
+                    .collect::<Vec<[u8; 56]>>();
+                res.extend_from_slice(&mut TryInto::<u32>::try_into(tmp.len()).unwrap().to_le_bytes());
+                for elem in tmp.iter_mut() {
+                    res.extend_from_slice(elem);
+                }
+            },
+            None => res.push(0u8),
+        };
+        match &self.my_secret_shares {
+            Some(v) => {
+                res.push(1u8);
+                let mut tmp = v.iter()
+                    .map(|e| e.to_bytes())
+                    .collect::<Vec<[u8; 36]>>();
+                res.extend_from_slice(&mut TryInto::<u32>::try_into(tmp.len()).unwrap().to_le_bytes());
+                for elem in tmp.iter_mut() {
+                    res.extend_from_slice(elem);
+                }
+            },
+            None => res.push(0u8),
+        };
+    
+        res
+    }
+    
+    /// Deserialise this slice of bytes to an `ActualState`
+    fn from_bytes(bytes: &[u8]) -> Result<ActualState, Error> {
+        let mut array = [0u8; 8];
+        array.copy_from_slice(&bytes[..8]);
+        let parameters = Parameters::from_bytes(&array)?;
+
+        let mut array = [0u8; 32];
+        array.copy_from_slice(&bytes[8..40]);
+        let dh_private_key = DHPrivateKey::from_bytes(&array)?;
+
+        array.copy_from_slice(&bytes[40..72]);
+        let dh_public_key = DHPublicKey::from_bytes(&array)?;
+        
+        let commit_len = u32::from_le_bytes(
+            bytes[72..76]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?,
+        );
+        let mut their_commitments: Vec<(u32, VerifiableSecretSharingCommitment)> = 
+            Vec::with_capacity(commit_len as usize);
+
+        let mut index_slice = 76 as usize;
+        for _ in 0..commit_len {
+            let index = u32::from_le_bytes(
+                bytes[index_slice..index_slice+4]
+                    .try_into()
+                    .map_err(|_| Error::SerialisationError)?,
+            );
+            let verifiable_commitment = VerifiableSecretSharingCommitment::from_bytes(&bytes[index_slice+4..])?;
+            their_commitments.push((index, verifiable_commitment.clone()));
+            index_slice += 8 + verifiable_commitment.0.len() * 32;
+        }
+
+        let dh_key_len = u32::from_le_bytes(
+            bytes[index_slice..index_slice+4]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?,
+        );
+        let mut their_dh_public_keys: Vec<(u32, DHPublicKey)> = 
+            Vec::with_capacity(dh_key_len as usize);
+
+        index_slice += 4;
+        for _ in 0..dh_key_len {
+            let index = u32::from_le_bytes(
+                bytes[index_slice..index_slice+4]
+                    .try_into()
+                    .map_err(|_| Error::SerialisationError)?,
+            );
+            let key = DHPublicKey::from_bytes(&bytes[index_slice+4..index_slice+36])?;
+            their_dh_public_keys.push((index, key));
+            index_slice += 36;
+        }
+
+        let my_secret_share = SecretShare::from_bytes(&bytes[index_slice..index_slice+36])?;
+        index_slice += 36;
+
+        let their_encrypted_secret_shares = match bytes[index_slice] {
+            1u8 => {
+                index_slice += 1;
+                let shares_len = u32::from_le_bytes(
+                    bytes[index_slice..index_slice+4]
+                        .try_into()
+                        .map_err(|_| Error::SerialisationError)?,
+                );
+                let mut encrypted_shares: Vec<EncryptedSecretShare> = 
+                    Vec::with_capacity(shares_len as usize);
+        
+                index_slice += 4;
+                for _ in 0..shares_len {
+                    let share = EncryptedSecretShare::from_bytes(&bytes[index_slice..index_slice+56])?;
+                    encrypted_shares.push(share);
+                    index_slice += 56;
+                }
+
+                Some(encrypted_shares)
+            },
+            0u8 => {
+                index_slice += 1;
+                None
+            },
+            _ => return Err(Error::SerialisationError),
+        };
+
+        let my_secret_shares = match bytes[index_slice] {
+            1u8 => {
+                index_slice += 1;
+                let shares_len = u32::from_le_bytes(
+                    bytes[index_slice..index_slice+4]
+                        .try_into()
+                        .map_err(|_| Error::SerialisationError)?,
+                );
+                let mut encrypted_shares: Vec<SecretShare> = 
+                    Vec::with_capacity(shares_len as usize);
+        
+                index_slice += 4;
+                for _ in 0..shares_len {
+                    let share = SecretShare::from_bytes(&bytes[index_slice..index_slice+36])?;
+                    encrypted_shares.push(share);
+                    index_slice += 36;
+                }
+
+                Some(encrypted_shares)
+            },
+            0u8 => {
+                None
+            },
+            _ => return Err(Error::SerialisationError),
+        };
+
+        Ok(ActualState {
+            parameters,
+            dh_private_key,
+            dh_public_key,
+            their_commitments,
+            their_dh_public_keys,
+            my_secret_share,
+            their_encrypted_secret_shares,
+            my_secret_shares,
+        })
+    }
 }
 
 /// Marker trait to designate valid rounds in the distributed key generation
@@ -993,6 +1173,31 @@ impl DistributedKeyGeneration<RoundOne> {
             state: self.state,
             data: RoundTwo {},
         })
+    }
+
+    /// Serialise this DKG to a Vec of bytes
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut res = self.state.to_bytes();
+        res.push(1u8);
+
+        res
+    }
+
+    /// Deserialise this slice of bytes to a `DistributedKeyGeneration::<RoundOne>`
+    pub fn from_bytes(bytes: &[u8]) -> Result<DistributedKeyGeneration::<RoundOne>, Error> {
+        let state = ActualState::from_bytes(&bytes)?;
+        let data = if bytes[bytes.len() - 1] == 1 {
+            RoundOne {}
+        } else {
+            return Err(Error::SerialisationError)
+        };
+
+        Ok(
+            DistributedKeyGeneration::<RoundOne> {
+                state: Box::new(state),
+                data,
+            }
+        )
     }
 }
 
@@ -1364,6 +1569,31 @@ impl DistributedKeyGeneration<RoundTwo> {
             Ok(()) => complaint.accused_index,
             Err(_) => complaint.maker_index,
         }
+    }
+
+    /// Serialise this DKG to a Vec of bytes
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut res = self.state.to_bytes();
+        res.push(2u8);
+
+        res
+    }
+
+    /// Deserialise this slice of bytes to a `DistributedKeyGeneration::<RoundTwo>`
+    pub fn from_bytes(bytes: &[u8]) -> Result<DistributedKeyGeneration::<RoundTwo>, Error> {
+        let state = ActualState::from_bytes(&bytes)?;
+        let data = if bytes[bytes.len() - 1] == 2 {
+            RoundTwo {}
+        } else {
+            return Err(Error::SerialisationError)
+        };
+
+        Ok(
+            DistributedKeyGeneration::<RoundTwo> {
+                state: Box::new(state),
+                data,
+            }
+        )
     }
 }
 
@@ -2066,13 +2296,16 @@ mod test {
                 let bytes = p1_state.their_encrypted_secret_shares().unwrap()[0].to_bytes();
                 assert_eq!(p1_state.their_encrypted_secret_shares().unwrap()[0], EncryptedSecretShare::from_bytes(&bytes).unwrap());
 
+                let bytes = p1_state.to_bytes();
+                assert_eq!(*p1_state.state, *DistributedKeyGeneration::<RoundOne>::from_bytes(&bytes).unwrap().state);
+
                 // Continue KeyGen
 
                 let p1_state = p1_state.clone().to_round_two(p1_my_encrypted_secret_shares).or(Err(()))?;
                 let p2_state = p2_state.clone().to_round_two(p2_my_encrypted_secret_shares).or(Err(()))?;
                 let p3_state = p3_state.clone().to_round_two(p3_my_encrypted_secret_shares).or(Err(()))?;
 
-                let (p1_group_key, _p1_secret_key) = p1_state.finish(p1.public_key().unwrap()).or(Err(()))?;
+                let (p1_group_key, _p1_secret_key) = p1_state.clone().finish(p1.public_key().unwrap()).or(Err(()))?;
                 let (p2_group_key, _p2_secret_key) = p2_state.finish(p2.public_key().unwrap()).or(Err(()))?;
                 let (p3_group_key, _p3_secret_key) = p3_state.finish(p3.public_key().unwrap()).or(Err(()))?;
 
@@ -2083,6 +2316,9 @@ mod test {
 
                 let bytes = p1_group_key.to_bytes();
                 assert_eq!(p1_group_key, GroupKey::from_bytes(bytes).unwrap());
+
+                let bytes = p1_state.to_bytes();
+                assert_eq!(*p1_state.state, *DistributedKeyGeneration::<RoundTwo>::from_bytes(&bytes).unwrap().state);
             }
 
             {
