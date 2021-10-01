@@ -193,6 +193,7 @@ use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::traits::Identity;
 
 use rand::rngs::OsRng;
+use rand::RngCore;
 
 use sha2::Digest;
 use sha2::Sha512;
@@ -204,10 +205,11 @@ use zeroize::Zeroize;
 use crate::nizk::NizkOfSecretKey;
 use crate::parameters::Parameters;
 
-use aes::{Aes256, Block};
+use aes::{Aes256, Aes256Ctr};
 use aes::cipher::{
-    BlockEncrypt, BlockDecrypt, NewBlockCipher,
+    FromBlockCipher, NewBlockCipher,
     generic_array::GenericArray,
+    StreamCipher,
 };
 
 /// Errors that may happen during Key Generation
@@ -717,29 +719,28 @@ fn encrypt_share(my_index: &u32, share: &SecretShare, aes_key: &[u8; 32]) -> Enc
     hkdf.expand(&[], &mut final_aes_key)
         .expect("KDF expansion failed unexpectedly");
 
+    let mut rng: OsRng = OsRng;
+    let mut nonce_array = [0u8; 16];
+    rng.fill_bytes(&mut nonce_array);
+
     let final_aes_key = GenericArray::from_slice(&final_aes_key);
-    let share_bytes = share.polynomial_evaluation.to_bytes();
-    let mut high_block = *Block::from_slice(&share_bytes[..16]);
-    let mut low_block = *Block::from_slice(&share_bytes[16..]);
+    let mut share_bytes = share.polynomial_evaluation.to_bytes();
 
+    let nonce = GenericArray::from_slice(&nonce_array);
     let cipher = Aes256::new(&final_aes_key);
+    let mut cipher = Aes256Ctr::from_block_cipher(cipher, &nonce);
 
-    cipher.encrypt_block(&mut high_block);
-    cipher.encrypt_block(&mut low_block);
-
-    let encrypted_polynomial_evaluation: [u8; 32] = [high_block, low_block].concat().try_into().unwrap();
+    cipher.apply_keystream(&mut share_bytes);
 
     EncryptedSecretShare {
         sender_index: *my_index,
         receiver_index: share.index,
-        encrypted_polynomial_evaluation,
+        nonce: nonce_array,
+        encrypted_polynomial_evaluation: share_bytes,
     }
 }
 
 fn decrypt_share(encrypted_share: &EncryptedSecretShare, aes_key: &[u8; 32]) -> Result<SecretShare, Error> {
-    let mut high_block = *Block::from_slice(&encrypted_share.encrypted_polynomial_evaluation[..16]);
-    let mut low_block = *Block::from_slice(&encrypted_share.encrypted_polynomial_evaluation[16..]);
-
     let hkdf = Hkdf::<Sha512>::new(None, &aes_key[..]);
     let mut final_aes_key = [0u8; 32];
     hkdf.expand(&[], &mut final_aes_key)
@@ -747,15 +748,12 @@ fn decrypt_share(encrypted_share: &EncryptedSecretShare, aes_key: &[u8; 32]) -> 
 
     let final_aes_key = GenericArray::from_slice(&final_aes_key);
 
+    let nonce = GenericArray::from_slice(&encrypted_share.nonce);
     let cipher = Aes256::new(&final_aes_key);
+    let mut cipher = Aes256Ctr::from_block_cipher(cipher, &nonce);
 
-    cipher.decrypt_block(&mut high_block);
-    cipher.decrypt_block(&mut low_block);
-
-    let mut bytes: [u8; 32] = [0; 32];
-
-    bytes[0..16].copy_from_slice(&high_block);
-    bytes[16..32].copy_from_slice(&low_block);
+    let mut bytes: [u8; 32] = encrypted_share.encrypted_polynomial_evaluation;
+    cipher.apply_keystream(&mut bytes);
 
     let evaluation = Scalar::from_canonical_bytes(bytes);
     if evaluation.is_none() {return Err(Error::DecryptionError)}
@@ -1061,17 +1059,20 @@ pub struct EncryptedSecretShare {
     pub sender_index: u32,
     /// The participant index that this secret share was calculated for.
     pub receiver_index: u32,
+    /// The nonce to be used for decryption with AES-CTR mode.
+    pub nonce: [u8; 16],
     /// The encrypted polynomial evaluation.
     pub(crate) encrypted_polynomial_evaluation: [u8; 32],
 }
 
 impl EncryptedSecretShare {
     /// Serialise this encrypted secret share to an array of bytes
-    pub fn to_bytes(&self) -> [u8; 40] {
-        let mut res = [0u8; 40];
+    pub fn to_bytes(&self) -> [u8; 56] {
+        let mut res = [0u8; 56];
         res[0..4].copy_from_slice(&mut self.sender_index.to_le_bytes());
         res[4..8].copy_from_slice(&mut self.receiver_index.to_le_bytes());
-        res[8..40].copy_from_slice(&mut self.encrypted_polynomial_evaluation.clone());
+        res[8..24].copy_from_slice(&mut self.nonce.clone());
+        res[24..56].copy_from_slice(&mut self.encrypted_polynomial_evaluation.clone());
 
         res
     }
@@ -1088,13 +1089,17 @@ impl EncryptedSecretShare {
                 .try_into()
                 .map_err(|_| Error::SerialisationError)?,
         );
-        let encrypted_polynomial_evaluation = bytes[8..40]
+        let nonce = bytes[8..24]
+            .try_into()
+            .map_err(|_| Error::SerialisationError)?;
+        let encrypted_polynomial_evaluation = bytes[24..56]
             .try_into()
             .map_err(|_| Error::SerialisationError)?;
 
         Ok(EncryptedSecretShare {
             sender_index,
             receiver_index,
+            nonce,
             encrypted_polynomial_evaluation,
         })
     }
@@ -1927,6 +1932,7 @@ mod test {
 
             let wrong_encrypted_secret_share = EncryptedSecretShare {sender_index: 1,
                                                                      receiver_index: 2,
+                                                                     nonce: [0; 16],
                                                                      encrypted_polynomial_evaluation: [0; 32]};
 
             let p1_my_encrypted_secret_shares = vec!(p2_their_encrypted_secret_shares[0].clone(), // XXX FIXME indexing
@@ -2054,6 +2060,7 @@ mod test {
             {
                 let wrong_encrypted_secret_share = EncryptedSecretShare {sender_index: 1,
                                                                          receiver_index: 2,
+                                                                         nonce: [0; 16],
                                                                          encrypted_polynomial_evaluation: [0; 32]};
 
                 let p1_my_encrypted_secret_shares = vec!(p2_their_encrypted_secret_shares[0].clone(),
