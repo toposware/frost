@@ -157,6 +157,16 @@ mod dkg_benches {
         });
     }
 
+    fn verify_zkp(c: &mut Criterion) {
+        let params = Parameters { n: 3, t: 2 };
+        let (p, _, _) = Participant::new(&params, 1, "Φ");
+
+        let bench_name = "ZKP Verification";
+        c.bench_function(&bench_name, move |b| {
+            b.iter(|| p.proof_of_secret_key.verify(&p.index, &p.commitments[0], "Φ"));
+        });
+    }
+
     fn generate_complaint(c: &mut Criterion) {
         let params = Parameters { n: 3, t: 2 };
 
@@ -250,6 +260,7 @@ mod dkg_benches {
     }
 
     fn dkg_bench(c: &mut Criterion) {
+        verify_zkp(c);
         generate_complaint(c);
         verify_complaint(c);
         dkg_bench_with_t_out_of_n(100, 34, c);
