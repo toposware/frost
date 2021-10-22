@@ -675,7 +675,7 @@ impl ActualState {
                 res.push(1u8);
                 let mut tmp = v.iter()
                     .map(|e| e.to_bytes())
-                    .collect::<Vec<[u8; 36]>>();
+                    .collect::<Vec<[u8; 40]>>();
                 res.extend_from_slice(&mut TryInto::<u32>::try_into(tmp.len()).unwrap().to_le_bytes());
                 for elem in tmp.iter_mut() {
                     res.extend_from_slice(elem);
@@ -735,8 +735,8 @@ impl ActualState {
             index_slice += 36;
         }
 
-        let my_secret_share = SecretShare::from_bytes(&bytes[index_slice..index_slice+36])?;
-        index_slice += 36;
+        let my_secret_share = SecretShare::from_bytes(&bytes[index_slice..index_slice+40])?;
+        index_slice += 40;
 
         let their_encrypted_secret_shares = match bytes[index_slice] {
             1u8 => {
@@ -773,17 +773,17 @@ impl ActualState {
                         .try_into()
                         .map_err(|_| Error::SerialisationError)?,
                 );
-                let mut encrypted_shares: Vec<SecretShare> = 
+                let mut shares: Vec<SecretShare> = 
                     Vec::with_capacity(shares_len as usize);
         
                 index_slice += 4;
                 for _ in 0..shares_len {
-                    let share = SecretShare::from_bytes(&bytes[index_slice..index_slice+36])?;
-                    encrypted_shares.push(share);
-                    index_slice += 36;
+                    let share = SecretShare::from_bytes(&bytes[index_slice..index_slice+40])?;
+                    shares.push(share);
+                    index_slice += 40;
                 }
 
-                Some(encrypted_shares)
+                Some(shares)
             },
             0u8 => {
                 None
@@ -834,7 +834,7 @@ pub trait Round2: private::Sealed {}
 impl Round1 for RoundOne {}
 impl Round2 for RoundTwo {}
 
-fn encrypt_share(my_index: &u32, share: &SecretShare, aes_key: &[u8; 32]) -> EncryptedSecretShare {
+fn encrypt_share(share: &SecretShare, aes_key: &[u8; 32]) -> EncryptedSecretShare {
     let hkdf = Hkdf::<Sha512>::new(None, &aes_key[..]);
     let mut final_aes_key = [0u8; 32];
     hkdf.expand(&[], &mut final_aes_key)
@@ -854,8 +854,8 @@ fn encrypt_share(my_index: &u32, share: &SecretShare, aes_key: &[u8; 32]) -> Enc
     cipher.apply_keystream(&mut share_bytes);
 
     EncryptedSecretShare {
-        sender_index: *my_index,
-        receiver_index: share.index,
+        sender_index: share.sender_index,
+        receiver_index: share.receiver_index,
         nonce: nonce_array,
         encrypted_polynomial_evaluation: share_bytes,
     }
@@ -879,7 +879,8 @@ fn decrypt_share(encrypted_share: &EncryptedSecretShare, aes_key: &[u8; 32]) -> 
     let evaluation = Scalar::from_canonical_bytes(bytes);
     if evaluation.is_none() {return Err(Error::DecryptionError)}
 
-    Ok(SecretShare { index: encrypted_share.receiver_index, 
+    Ok(SecretShare { sender_index: encrypted_share.sender_index,
+                     receiver_index: encrypted_share.receiver_index, 
                      polynomial_evaluation: evaluation.unwrap() })
 }
 
@@ -965,14 +966,14 @@ impl DistributedKeyGeneration<RoundOne> {
 
         // XXX need a way to index their_encrypted_secret_shares
         for p in other_participants.iter() {
-            let share = SecretShare::evaluate_polynomial(&p.index, my_coefficients);
+            let share = SecretShare::evaluate_polynomial(my_index, &p.index, my_coefficients);
 
             let dh_key = (p.dh_public_key.0 * dh_private_key.0).compress().to_bytes();
 
-            their_encrypted_secret_shares.push(encrypt_share(my_index, &share, &dh_key));
+            their_encrypted_secret_shares.push(encrypt_share(&share, &dh_key));
         }
 
-        let my_secret_share = SecretShare::evaluate_polynomial(my_index, my_coefficients);
+        let my_secret_share = SecretShare::evaluate_polynomial(my_index, my_index, my_coefficients);
         let state = ActualState {
             parameters: *parameters,
             dh_private_key: dh_private_key.clone(),
@@ -1124,8 +1125,10 @@ impl DistributedKeyGeneration<RoundOne> {
 #[derive(Clone, Debug, Eq, PartialEq, Zeroize)]
 #[zeroize(drop)]
 pub struct SecretShare {
+    /// The index of the share maker.
+    pub sender_index: u32,
     /// The participant index that this secret share was calculated for.
-    pub index: u32,
+    pub receiver_index: u32,
     /// The final evaluation of the polynomial for the participant-respective
     /// indeterminant.
     pub(crate) polynomial_evaluation: Scalar,
@@ -1135,27 +1138,27 @@ impl SecretShare {
     /// Evaluate the polynomial, `f(x)` for the secret coefficients at the value of `x`.
     //
     // XXX [PAPER] [CFRG] The participant index CANNOT be 0, or the secret share ends up being Scalar::zero().
-    pub(crate) fn evaluate_polynomial(index: &u32, coefficients: &Coefficients) -> SecretShare {
-        let term: Scalar = (*index).into();
+    pub(crate) fn evaluate_polynomial(sender_index: &u32, receiver_index: &u32, coefficients: &Coefficients) -> SecretShare {
+        let term: Scalar = (*receiver_index).into();
         let mut sum: Scalar = Scalar::zero();
 
         // Evaluate using Horner's method.
-        for (index, coefficient) in coefficients.0.iter().rev().enumerate() {
+        for (receiver_index, coefficient) in coefficients.0.iter().rev().enumerate() {
             // The secret is the constant term in the polynomial
             sum += coefficient;
 
-            if index != (coefficients.0.len() - 1) {
+            if receiver_index != (coefficients.0.len() - 1) {
                 sum *= term;
             }
         }
-        SecretShare { index: *index, polynomial_evaluation: sum }
+        SecretShare { sender_index: *sender_index, receiver_index: *receiver_index, polynomial_evaluation: sum }
     }
 
     /// Verify that this secret share was correctly computed w.r.t. some secret
     /// polynomial coefficients attested to by some `commitment`.
     pub(crate) fn verify(&self, commitment: &VerifiableSecretSharingCommitment) -> Result<(), Error> {
         let lhs = &RISTRETTO_BASEPOINT_TABLE * &self.polynomial_evaluation;
-        let term: Scalar = self.index.into();
+        let term: Scalar = self.receiver_index.into();
         let mut rhs: RistrettoPoint = RistrettoPoint::identity();
 
         for (index, com) in commitment.points.iter().rev().enumerate() {
@@ -1173,29 +1176,37 @@ impl SecretShare {
     }
 
     /// Serialise this secret share to an array of bytes
-    pub fn to_bytes(&self) -> [u8; 36] {
-        let mut res = [0u8; 36];
-        res[0..4].copy_from_slice(&mut self.index.to_le_bytes());
-        res[4..36].copy_from_slice(&mut self.polynomial_evaluation.to_bytes());
+    pub fn to_bytes(&self) -> [u8; 40] {
+        let mut res = [0u8; 40];
+        res[0..4].copy_from_slice(&mut self.sender_index.to_le_bytes());
+        res[4..8].copy_from_slice(&mut self.receiver_index.to_le_bytes());
+        res[8..40].copy_from_slice(&mut self.polynomial_evaluation.to_bytes());
 
         res
     }
 
     /// Deserialise this slice of bytes to a `SecretShare`
     pub fn from_bytes(bytes: &[u8]) -> Result<SecretShare, Error> {
-        let index = u32::from_le_bytes(
+        let sender_index = u32::from_le_bytes(
             bytes[0..4]
                 .try_into()
                 .map_err(|_| Error::SerialisationError)?,
         );
 
+        let receiver_index = u32::from_le_bytes(
+            bytes[4..8]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?,
+        );
+
         let mut array = [0u8; 32];
-        array.copy_from_slice(&bytes[4..36]);
+        array.copy_from_slice(&bytes[8..40]);
         let polynomial_evaluation = Scalar::from_canonical_bytes(array)
                 .ok_or(Error::SerialisationError)?;
 
         Ok(SecretShare {
-            index,
+            sender_index,
+            receiver_index,
             polynomial_evaluation,
         })
     }
@@ -1417,7 +1428,7 @@ impl DistributedKeyGeneration<RoundTwo> {
 
         key += self.state.my_secret_share.polynomial_evaluation;
 
-        Ok(SecretKey { index: self.state.my_secret_share.index, key })
+        Ok(SecretKey { index: self.state.my_secret_share.sender_index, key })
     }
 
     /// Calculate the group public key used for verifying threshold signatures.
@@ -1746,7 +1757,7 @@ mod test {
         }
 
         let coefficients = Coefficients(coeffs);
-        let share = SecretShare::evaluate_polynomial(&1, &coefficients);
+        let share = SecretShare::evaluate_polynomial(&1, &1, &coefficients);
 
         assert!(share.polynomial_evaluation == Scalar::from(5u8));
 
@@ -1768,7 +1779,7 @@ mod test {
         }
 
         let coefficients = Coefficients(coeffs);
-        let share = SecretShare::evaluate_polynomial(&0, &coefficients);
+        let share = SecretShare::evaluate_polynomial(&1, &0, &coefficients);
 
         assert!(share.polynomial_evaluation == Scalar::one());
 
@@ -1985,15 +1996,15 @@ mod test {
     #[test]
     fn encrypt_and_decrypt() {
         let mut rng: OsRng = OsRng;
-        let original_share = SecretShare { index: 2,
+
+        let original_share = SecretShare { sender_index: 1,
+                                           receiver_index: 2,
                                            polynomial_evaluation: Scalar::random(&mut rng)};
 
         let mut key = [0u8; 32];
         rng.fill(&mut key);
 
-        let index = 1;
-
-        let encrypted_share = encrypt_share(&index, &original_share, &key);
+        let encrypted_share = encrypt_share(&original_share, &key);
         let decrypted_share = decrypt_share(&encrypted_share, &key);
 
         assert!(decrypted_share.is_ok());
