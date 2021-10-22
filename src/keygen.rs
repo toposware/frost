@@ -312,7 +312,7 @@ impl Coefficients {
     }
 }
 
-/// A commitment to the dealer's secret polynomial coefficients for Feldman's
+/// A commitment to a participant's secret polynomial coefficients for Feldman's
 /// verifiable secret sharing scheme.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VerifiableSecretSharingCommitment(pub(crate) Vec<RistrettoPoint>);
@@ -421,19 +421,6 @@ impl Deref for DHPublicKey {
     }
 }
 
-/// A participant created by a trusted dealer.
-///
-/// This can be used to create the participants' keys and secret shares without
-/// having to do secret sharing or zero-knowledge proofs.  It's mostly provided
-/// for testing and debugging purposes, but there is nothing wrong with using it
-/// if you have trust in the dealer to not forge rogue signatures.
-#[derive(Clone, Debug)]
-pub struct DealtParticipant {
-    pub(crate) secret_share: SecretShare,
-    pub(crate) public_key: IndividualPublicKey,
-    pub(crate) group_key: RistrettoPoint,
-}
-
 /// A participant in a threshold signing.
 #[derive(Clone, Debug)]
 pub struct Participant {
@@ -455,23 +442,6 @@ pub struct Participant {
 }
 
 impl Participant {
-    /// Have a trusted dealer generate all participants' key material and
-    /// associated commitments for distribution to the participants.
-    ///
-    /// # Warning
-    ///
-    /// Each participant MUST verify with all other n-1 participants that the
-    /// [`VerifiableSecretSharingCommitment`] given to them by the dealer is
-    /// identical.  Otherwise, the participants' secret shares could be formed
-    /// with respect to different polynomials and they will fail to create
-    /// threshold signatures which validate.
-    pub fn dealer(parameters: &Parameters) -> (Vec<DealtParticipant>, VerifiableSecretSharingCommitment) {
-        let mut rng: OsRng = OsRng;
-        let secret = Scalar::random(&mut rng);
-
-        generate_shares(parameters, secret, rng)
-    }
-
     /// Construct a new participant for the distributed key generation protocol.
     ///
     /// # Inputs
@@ -609,47 +579,6 @@ impl Participant {
             proof_of_dh_private_key,
         })
     }
-}
-
-fn generate_shares(parameters: &Parameters, secret: Scalar, mut rng: OsRng) -> (Vec<DealtParticipant>, VerifiableSecretSharingCommitment) {
-    let mut participants: Vec<DealtParticipant> = Vec::with_capacity(parameters.n as usize);
-
-    // STEP 1: Every participant P_i samples t random values (a_{i0}, ..., a_{i(t-1)})
-    //         uniformly in ZZ_q, and uses these values as coefficients to define a
-    //         polynomial f_i(x) = \sum_{j=0}^{t-1} a_{ij} x^{j} of degree t-1 over
-    //         ZZ_q.
-    let t: usize = parameters.t as usize;
-    let mut coefficients: Vec<Scalar> = Vec::with_capacity(t as usize);
-    let mut commitment = VerifiableSecretSharingCommitment(Vec::with_capacity(t as usize));
-
-    coefficients.push(secret);
-    for _ in 0..t-1 {
-        coefficients.push(Scalar::random(&mut rng));
-    }
-
-    let coefficients = Coefficients(coefficients);
-
-    // Step 3: Every participant P_i computes a public commitment
-    //         C_i = [\phi_{i0}, ..., \phi_{i(t-1)}], where \phi_{ij} = g^{a_{ij}},
-    //         0 ≤ j ≤ t-1.
-    for j in 0..t {
-        commitment.0.push(&coefficients.0[j] * &RISTRETTO_BASEPOINT_TABLE);
-    }
-
-    // Generate secret shares here
-    let group_key = &RISTRETTO_BASEPOINT_TABLE * &coefficients.0[0];
-
-    // Only one polynomial because dealer, then secret shards are dependent upon index.
-    for i in 1..parameters.n + 1 {
-        let secret_share = SecretShare::evaluate_polynomial(&i, &coefficients);
-        let public_key = IndividualPublicKey {
-            index: i,
-            share: &RISTRETTO_BASEPOINT_TABLE * &secret_share.polynomial_evaluation,
-        };
-
-        participants.push(DealtParticipant { secret_share, public_key, group_key });
-    }
-    (participants, commitment)
 }
 
 impl PartialOrd for Participant {
@@ -1755,25 +1684,6 @@ mod test {
     use super::*;
     use rand::Rng;
 
-    use crate::precomputation::generate_commitment_share_lists;
-
-    use crate::signature::{calculate_lagrange_coefficients, compute_message_hash};
-    use crate::signature::SignatureAggregator;
-
-    /// Reconstruct the secret from enough (at least the threshold) already-verified shares.
-    fn reconstruct_secret(participants: &[&DealtParticipant]) -> Result<Scalar, &'static str> {
-        let all_participant_indices: Vec<u32> = participants.iter().map(|p| p.public_key.index).collect();
-        let mut secret = Scalar::zero();
-
-        for this_participant in participants {
-            let my_coeff = calculate_lagrange_coefficients(&this_participant.public_key.index,
-                                                           &all_participant_indices)?;
-
-            secret += my_coeff * this_participant.secret_share.polynomial_evaluation;
-        }
-        Ok(secret)
-    }
-
     #[test]
     fn nizk_of_secret_key() {
         let params = Parameters { n: 3, t: 2 };
@@ -1781,95 +1691,6 @@ mod test {
         let result = p.proof_of_secret_key.verify(&p.index, &p.commitments[0], "Φ");
 
         assert!(result.is_ok());
-    }
-
-    #[test]
-    fn verify_secret_sharing_from_dealer() {
-        let params = Parameters { n: 3, t: 2 };
-        let mut rng: OsRng = OsRng;
-        let secret = Scalar::random(&mut rng);
-        let (participants, _commitment) = generate_shares(&params, secret, rng);
-
-        let mut subset_participants = Vec::new();
-        for i in 0..params.t{
-            subset_participants.push(&participants[i as usize]);
-        }
-        let supposed_secret = reconstruct_secret(&subset_participants);
-        assert!(secret == supposed_secret.unwrap());
-    }
-
-    #[test]
-    fn dkg_with_dealer() {
-        let params = Parameters { t: 1, n: 2 };
-        let (participants, commitment) = Participant::dealer(&params);
-        let (_, commitment2) = Participant::dealer(&params);
-
-        // Verify each of the participants' secret shares.
-        for p in participants.iter() {
-            let result = p.secret_share.verify(&commitment);
-
-            assert!(result.is_ok(), "participant {} failed to receive a valid secret share", p.public_key.index);
-
-            let result = p.secret_share.verify(&commitment2);
-
-            assert!(!result.is_ok(), "Should not validate with invalid commitment");
-        }
-    }
-
-    #[test]
-    fn dkg_with_dealer_and_signing() {
-        let params = Parameters { t: 1, n: 2 };
-        let (participants, commitment) = Participant::dealer(&params);
-
-        // Verify each of the participants' secret shares.
-        for p in participants.iter() {
-            let result = p.secret_share.verify(&commitment);
-
-            assert!(result.is_ok(), "participant {} failed to receive a valid secret share", p.public_key.index);
-        }
-
-        let context = b"CONTEXT STRING STOLEN FROM DALEK TEST SUITE";
-        let message = b"This is a test of the tsunami alert system. This is only a test.";
-        let (p1_public_comshares, mut p1_secret_comshares) = generate_commitment_share_lists(&mut OsRng, 1, 1);
-        let (p2_public_comshares, mut p2_secret_comshares) = generate_commitment_share_lists(&mut OsRng, 2, 1);
-
-        let p1_sk = SecretKey {
-            index: participants[0].secret_share.index,
-            key: participants[0].secret_share.polynomial_evaluation,
-        };
-        let p2_sk = SecretKey {
-            index: participants[1].secret_share.index,
-            key: participants[1].secret_share.polynomial_evaluation,
-        };
-
-        let group_key = GroupKey(participants[0].group_key);
-
-        let mut aggregator = SignatureAggregator::new(params, group_key, &context[..], &message[..]);
-
-        aggregator.include_signer(1, p1_public_comshares.commitments[0], (&p1_sk).into());
-        aggregator.include_signer(2, p2_public_comshares.commitments[0], (&p2_sk).into());
-
-        let signers = aggregator.get_signers();
-        let message_hash = compute_message_hash(&context[..], &message[..]);
-
-        let p1_partial = p1_sk.sign(&message_hash, &group_key, &mut p1_secret_comshares, 0, signers).unwrap();
-        let p2_partial = p2_sk.sign(&message_hash, &group_key, &mut p2_secret_comshares, 0, signers).unwrap();
-
-        aggregator.include_partial_signature(p1_partial);
-        aggregator.include_partial_signature(p2_partial);
-
-        let aggregator = aggregator.finalize().unwrap();
-        let signing_result = aggregator.aggregate();
-
-        assert!(signing_result.is_ok());
-
-        let threshold_signature = signing_result.unwrap();
-
-        let verification_result = threshold_signature.verify(&group_key, &message_hash);
-
-        println!("{:?}", verification_result);
-
-        assert!(verification_result.is_ok());
     }
 
     #[test]
