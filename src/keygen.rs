@@ -1339,7 +1339,7 @@ impl EncryptedSecretShare {
 }
 
 /// A proof that a generated complaint is valid. 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ComplaintProof {
     /// a1 = g^r.
     pub a1: RistrettoPoint,
@@ -1382,7 +1382,7 @@ impl ComplaintProof {
 }
 
 /// A complaint generated when a participant receives a bad share.
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Complaint {
     /// The index of the complaint maker.
     pub maker_index: u32,
@@ -1564,10 +1564,9 @@ impl DistributedKeyGeneration<RoundTwo> {
         if share.is_err() {
             return complaint.accused_index
         }
-
         match share.unwrap().verify(&commitment_accused) {
-            Ok(()) => complaint.accused_index,
-            Err(_) => complaint.maker_index,
+            Ok(()) => complaint.maker_index,
+            Err(_) => complaint.accused_index,
         }
     }
 
@@ -2187,67 +2186,162 @@ mod test {
             p3.proof_of_secret_key.verify(&p3.index, &p3.public_key().unwrap(), "Φ").or(Err(()))?;
 
             let mut p1_other_participants: Vec<Participant> = vec!(p2.clone(), p3.clone());
-            let p1_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+            let p1_state_orig = DistributedKeyGeneration::<RoundOne>::new(&params,
                                                                      &dh_sk1,
                                                                      &p1.index,
                                                                      &p1coeffs,
                                                                      &mut p1_other_participants,
                                                                      "Φ").or(Err(()))?;
-            let p1_their_encrypted_secret_shares = p1_state.their_encrypted_secret_shares()?;
+            let p1_their_encrypted_secret_shares = p1_state_orig.their_encrypted_secret_shares()?;
 
             let mut p2_other_participants: Vec<Participant> = vec!(p1.clone(), p3.clone());
-            let p2_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+            let p2_state_orig = DistributedKeyGeneration::<RoundOne>::new(&params,
                                                                      &dh_sk2,
                                                                      &p2.index,
                                                                      &p2coeffs,
                                                                      &mut p2_other_participants,
                                                                      "Φ").or(Err(()))?;
-            let p2_their_encrypted_secret_shares = p2_state.their_encrypted_secret_shares()?;
+            let p2_their_encrypted_secret_shares = p2_state_orig.their_encrypted_secret_shares()?;
 
             let mut p3_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone());
-            let  p3_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+            let  p3_state_orig = DistributedKeyGeneration::<RoundOne>::new(&params,
                                                                       &dh_sk3,
                                                                       &p3.index,
                                                                       &p3coeffs,
                                                                       &mut p3_other_participants,
                                                                       "Φ").or(Err(()))?;
-            let p3_their_encrypted_secret_shares = p3_state.their_encrypted_secret_shares()?;
+            let p3_their_encrypted_secret_shares = p3_state_orig.their_encrypted_secret_shares()?;
 
-            let wrong_encrypted_secret_share = EncryptedSecretShare {sender_index: 1,
-                                                                     receiver_index: 2,
-                                                                     nonce: [0; 16],
-                                                                     encrypted_polynomial_evaluation: [0; 32]};
+            let complaint: Complaint;
 
-            let p1_my_encrypted_secret_shares = vec!(p2_their_encrypted_secret_shares[0].clone(), // XXX FIXME indexing
-                                           p3_their_encrypted_secret_shares[0].clone());
-            // Wrong share inserted here!
-            let p2_my_encrypted_secret_shares = vec!(wrong_encrypted_secret_share.clone(),
-                                           p3_their_encrypted_secret_shares[1].clone());
-            let p3_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[1].clone(),
-                                           p2_their_encrypted_secret_shares[1].clone());
+            // Wrong decryption from nonce
+            {
+                let mut wrong_encrypted_secret_share = p1_their_encrypted_secret_shares[0].clone();
+                wrong_encrypted_secret_share.nonce = [42; 16];
 
-            let p1_state = p1_state.to_round_two(p1_my_encrypted_secret_shares).or(Err(()))?;
-            let p3_state = p3_state.to_round_two(p3_my_encrypted_secret_shares).or(Err(()))?;
+                let p1_my_encrypted_secret_shares = vec!(p2_their_encrypted_secret_shares[0].clone(),
+                                               p3_their_encrypted_secret_shares[0].clone());
+                // Wrong share inserted here!
+                let p2_my_encrypted_secret_shares = vec!(wrong_encrypted_secret_share.clone(),
+                                               p3_their_encrypted_secret_shares[1].clone());
+                let p3_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[1].clone(),
+                                               p2_their_encrypted_secret_shares[1].clone());
 
+                let p1_state = p1_state_orig.clone().to_round_two(p1_my_encrypted_secret_shares).or(Err(()))?;
+                let p3_state = p3_state_orig.clone().to_round_two(p3_my_encrypted_secret_shares).or(Err(()))?;
 
-            let complaints = p2_state.to_round_two(p2_my_encrypted_secret_shares);
-            assert!(complaints.is_err());
-            let complaints = complaints.unwrap_err();
-            if let Error::Complaint(complaints) = complaints {
-                assert!(complaints.len() == 1);
+                let complaints = p2_state_orig.clone().to_round_two(p2_my_encrypted_secret_shares.clone());
+                assert!(complaints.is_err());
+                let complaints = complaints.unwrap_err();
+                if let Error::Complaint(complaints) = complaints {
+                    assert!(complaints.len() == 1);
 
-                let bad_index = p3_state.blame(&wrong_encrypted_secret_share, &complaints[0]);
-                assert!(bad_index == 1);
+                    let bad_index = p3_state.blame(&wrong_encrypted_secret_share, &complaints[0]);
+                    assert!(bad_index == 1);
 
-                let (p1_group_key, _p1_secret_key) = p1_state.finish(p1.public_key().unwrap()).or(Err(()))?;
-                let (p3_group_key, _p3_secret_key) = p3_state.finish(p3.public_key().unwrap()).or(Err(()))?;
+                    let (p1_group_key, _p1_secret_key) = p1_state.finish(p1.public_key().unwrap()).or(Err(()))?;
+                    let (p3_group_key, _p3_secret_key) = p3_state.finish(p3.public_key().unwrap()).or(Err(()))?;
 
-                assert!(p1_group_key.0.compress() == p3_group_key.0.compress());
+                    assert!(p1_group_key.0.compress() == p3_group_key.0.compress());
 
-                Ok(())
-            } else {
-                Err(())
+                    // Copy for next test
+                    complaint = complaints[0].clone();
+                } else {
+                    return Err(())
+                }
             }
+
+            // Wrong decryption of polynomial evaluation
+            {
+                let mut wrong_encrypted_secret_share = p1_their_encrypted_secret_shares[0].clone();
+                wrong_encrypted_secret_share.encrypted_polynomial_evaluation = [42; 32];
+
+                let p1_my_encrypted_secret_shares = vec!(p2_their_encrypted_secret_shares[0].clone(),
+                                               p3_their_encrypted_secret_shares[0].clone());
+                // Wrong share inserted here!
+                let p2_my_encrypted_secret_shares = vec!(wrong_encrypted_secret_share.clone(),
+                                               p3_their_encrypted_secret_shares[1].clone());
+                let p3_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[1].clone(),
+                                               p2_their_encrypted_secret_shares[1].clone());
+
+                let p1_state = p1_state_orig.clone().to_round_two(p1_my_encrypted_secret_shares).or(Err(()))?;
+                let p3_state = p3_state_orig.clone().to_round_two(p3_my_encrypted_secret_shares).or(Err(()))?;
+
+                let complaints = p2_state_orig.clone().to_round_two(p2_my_encrypted_secret_shares.clone());
+                assert!(complaints.is_err());
+                let complaints = complaints.unwrap_err();
+                if let Error::Complaint(complaints) = complaints {
+                    assert!(complaints.len() == 1);
+
+                    let bad_index = p3_state.blame(&wrong_encrypted_secret_share, &complaints[0]);
+                    assert!(bad_index == 1);
+
+                    let (p1_group_key, _p1_secret_key) = p1_state.finish(p1.public_key().unwrap()).or(Err(()))?;
+                    let (p3_group_key, _p3_secret_key) = p3_state.finish(p3.public_key().unwrap()).or(Err(()))?;
+
+                    assert!(p1_group_key.0.compress() == p3_group_key.0.compress());
+                } else {
+                    return Err(())
+                }
+            }
+
+            // Wrong encrypted share
+            {
+                let dh_key = (p1.dh_public_key.0 * dh_sk1.0).compress().to_bytes();
+                let wrong_encrypted_secret_share = encrypt_share(
+                    &1,
+                    &SecretShare {
+                        index: 1,
+                        polynomial_evaluation: Scalar::from(42u32)
+                    },
+                    &dh_key
+                );
+
+                let p1_my_encrypted_secret_shares = vec!(p2_their_encrypted_secret_shares[0].clone(),
+                                               p3_their_encrypted_secret_shares[0].clone());
+                // Wrong share inserted here!
+                let p2_my_encrypted_secret_shares = vec!(wrong_encrypted_secret_share.clone(),
+                                               p3_their_encrypted_secret_shares[1].clone());
+                let p3_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[1].clone(),
+                                               p2_their_encrypted_secret_shares[1].clone());
+
+                let p1_state = p1_state_orig.clone().to_round_two(p1_my_encrypted_secret_shares).or(Err(()))?;
+                let p3_state = p3_state_orig.clone().to_round_two(p3_my_encrypted_secret_shares).or(Err(()))?;
+
+                let complaints = p2_state_orig.clone().to_round_two(p2_my_encrypted_secret_shares.clone());
+                assert!(complaints.is_err());
+                let complaints = complaints.unwrap_err();
+                if let Error::Complaint(complaints) = complaints {
+                    assert!(complaints.len() == 1);
+
+                    let bad_index = p3_state.blame(&wrong_encrypted_secret_share, &complaints[0]);
+                    assert!(bad_index == 1);
+
+                    let (p1_group_key, _p1_secret_key) = p1_state.finish(p1.public_key().unwrap()).or(Err(()))?;
+                    let (p3_group_key, _p3_secret_key) = p3_state.finish(p3.public_key().unwrap()).or(Err(()))?;
+
+                    assert!(p1_group_key.0.compress() == p3_group_key.0.compress());
+                } else {
+                    return Err(())
+                }
+            }
+
+            // Wrong complaint leads to blaming the complaint maker
+            {
+                let _p1_my_encrypted_secret_shares = vec!(p2_their_encrypted_secret_shares[0].clone(),
+                                               p3_their_encrypted_secret_shares[0].clone());
+                let _p2_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[0].clone(),
+                                               p3_their_encrypted_secret_shares[1].clone());
+                let p3_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[1].clone(),
+                                               p2_their_encrypted_secret_shares[1].clone());
+
+                let p3_state = p3_state_orig.clone().to_round_two(p3_my_encrypted_secret_shares).or(Err(()))?;
+
+                let bad_index = p3_state.blame(&p1_their_encrypted_secret_shares[0], &complaint);
+                assert!(bad_index == 2);
+            }
+
+            Ok(())
         }
         assert!(do_test().is_ok());
     }
