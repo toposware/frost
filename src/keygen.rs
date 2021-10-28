@@ -1649,7 +1649,7 @@ impl IndividualPublicKey {
 }
 
 /// A secret key, used by one participant in a threshold signature scheme, to sign a message.
-#[derive(Debug, Zeroize)]
+#[derive(Debug, Eq, PartialEq, Zeroize)]
 #[zeroize(drop)]
 pub struct SecretKey {
     /// The participant index to which this key belongs.
@@ -1667,6 +1667,31 @@ impl SecretKey {
             index: self.index,
             share,
         }
+    }
+
+    /// Serialise this secret key to an array of bytes.
+    pub fn to_bytes(&self) -> [u8; 36] {
+        let mut res = [0u8; 36];
+        res[0..4].copy_from_slice(&self.index.to_le_bytes());
+        res[4..36].copy_from_slice(&self.key.to_bytes());
+
+        res
+    }
+
+    /// Deserialise this secret key from an array of bytes.
+    pub fn from_bytes(bytes: [u8; 36]) -> Result<SecretKey, Error> {
+        let index = u32::from_le_bytes(
+            bytes[0..4]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?,
+        );
+
+        let mut array = [0u8; 32];
+        array.copy_from_slice(&bytes[4..36]);
+        let key = Scalar::from_canonical_bytes(array)
+            .ok_or(Error::SerialisationError)?;
+
+        Ok(SecretKey { index, key })
     }
 }
 
@@ -2305,7 +2330,7 @@ mod test {
                 let p2_state = p2_state.clone().to_round_two(p2_my_encrypted_secret_shares).or(Err(()))?;
                 let p3_state = p3_state.clone().to_round_two(p3_my_encrypted_secret_shares).or(Err(()))?;
 
-                let (p1_group_key, _p1_secret_key) = p1_state.clone().finish(p1.public_key().unwrap()).or(Err(()))?;
+                let (p1_group_key, p1_secret_key) = p1_state.clone().finish(p1.public_key().unwrap()).or(Err(()))?;
                 let (p2_group_key, _p2_secret_key) = p2_state.finish(p2.public_key().unwrap()).or(Err(()))?;
                 let (p3_group_key, _p3_secret_key) = p3_state.finish(p3.public_key().unwrap()).or(Err(()))?;
 
@@ -2313,6 +2338,9 @@ mod test {
                 assert!(p2_group_key.0.compress() == p3_group_key.0.compress());
 
                 // Check serialisation
+
+                let bytes = p1_secret_key.to_bytes();
+                assert_eq!(p1_secret_key, SecretKey::from_bytes(bytes).unwrap());
 
                 let bytes = p1_group_key.to_bytes();
                 assert_eq!(p1_group_key, GroupKey::from_bytes(bytes).unwrap());
