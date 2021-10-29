@@ -413,9 +413,6 @@ pub struct Participant {
     /// first coefficient in the private polynomial).  It is constructed as a
     /// Schnorr signature using \\( a_{i0} \\) as the signing key.
     pub proof_of_secret_key: NizkOfSecretKey,
-    /// The zero-knowledge proof of knowledge of the DH private key.
-    /// It is computed similarly to the proof_of_secret_key.
-    pub proof_of_dh_private_key: NizkOfSecretKey,
 }
 
 impl Participant {
@@ -477,9 +474,6 @@ impl Participant {
         let dh_private_key = DHPrivateKey(Scalar::random(&mut rng));
         let dh_public_key = &RISTRETTO_BASEPOINT_TABLE * &dh_private_key;
 
-        // Compute a proof of knowledge of dh_secret_key
-        let proof_of_dh_private_key: NizkOfSecretKey = NizkOfSecretKey::prove(&index, &dh_private_key, &dh_public_key, &context_string, rng);
-
         // Step 3: Every participant P_i computes a public commitment
         //         C_i = [\phi_{i0}, ..., \phi_{i(t-1)}], where \phi_{ij} = g^{a_{ij}},
         //         0 ≤ j ≤ t-1.
@@ -496,7 +490,7 @@ impl Participant {
         let proof_of_secret_key: NizkOfSecretKey = NizkOfSecretKey::prove(&index, &coefficients.0[0], &commitments[0], &context_string, rng);
 
         // Step 4: Every participant P_i broadcasts C_i, \alpha_i to all other participants.
-        (Participant { index, dh_public_key, commitments, proof_of_secret_key, proof_of_dh_private_key }, coefficients, dh_private_key)
+        (Participant { index, dh_public_key, commitments, proof_of_secret_key}, coefficients, dh_private_key)
     }
 
     /// Retrieve \\( \alpha_{i0} * B \\), where \\( B \\) is the Ristretto basepoint.
@@ -511,7 +505,7 @@ impl Participant {
 
     /// Serialise this participant to a Vec of bytes
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut res: Vec<u8> = Vec::with_capacity(168 + self.commitments.len() * 32); // 4 + 32 + 4 + len * 32 + 64 + 64
+        let mut res: Vec<u8> = Vec::with_capacity(104 + self.commitments.len() * 32); // 4 + 32 + 4 + len * 32 + 64 + 64
         res.extend_from_slice(&mut self.index.to_le_bytes());
         res.extend_from_slice(&mut self.dh_public_key.compress().to_bytes());
         let mut tmp = self
@@ -524,7 +518,6 @@ impl Participant {
             res.extend_from_slice(elem);
         }
         res.extend_from_slice(&mut self.proof_of_secret_key.to_bytes());
-        res.extend_from_slice(&mut self.proof_of_dh_private_key.to_bytes());
 
         res
     }
@@ -564,15 +557,12 @@ impl Participant {
 
         let proof_of_secret_key =
             NizkOfSecretKey::from_bytes(&bytes[index_slice..index_slice + 64])?;
-        let proof_of_dh_private_key =
-            NizkOfSecretKey::from_bytes(&bytes[index_slice + 64..index_slice + 128])?;
 
         Ok(Participant {
             index,
             dh_public_key,
             commitments,
             proof_of_secret_key,
-            proof_of_dh_private_key,
         })
     }
 }
@@ -812,11 +802,6 @@ impl DistributedKeyGeneration<RoundOne> {
                 Ok(_)  => {
                             their_commitments.push((p.index, VerifiableSecretSharingCommitment(p.commitments.clone())));
                             their_dh_public_keys.push((p.index, p.dh_public_key));
-
-                            match p.proof_of_dh_private_key.verify(&p.index, &p.dh_public_key, &context_string) {
-                                Ok(_)  => (),
-                                Err(_) => misbehaving_participants.push(p.index),
-                            }
                           },
                 Err(_) => misbehaving_participants.push(p.index),
             }
