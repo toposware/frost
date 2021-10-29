@@ -1600,7 +1600,7 @@ impl DistributedKeyGeneration<RoundTwo> {
 ///
 /// Any participant can recalculate the public verification share, which is the
 /// public half of a [`SecretKey`], of any other participant in the protocol.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IndividualPublicKey {
     /// The participant index to which this key belongs.
     pub index: u32,
@@ -1644,6 +1644,32 @@ impl IndividualPublicKey {
             }
         }
         unimplemented!()
+    }
+
+    /// Serialise this individual public key to an array of bytes.
+    pub fn to_bytes(&self) -> [u8; 36] {
+        let mut res = [0u8; 36];
+        res[0..4].copy_from_slice(&self.index.to_le_bytes());
+        res[4..36].copy_from_slice(&self.share.compress().to_bytes());
+
+        res
+    }
+
+    /// Deserialise this individual public key from an array of bytes.
+    pub fn from_bytes(bytes: [u8; 36]) -> Result<IndividualPublicKey, Error> {
+        let index = u32::from_le_bytes(
+            bytes[0..4]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?,
+        );
+
+        let mut array = [0u8; 32];
+        array.copy_from_slice(&bytes[4..36]);
+        let share = CompressedRistretto(array)
+            .decompress()
+            .ok_or(Error::SerialisationError)?;
+
+        Ok(IndividualPublicKey { index, share })
     }
 }
 
@@ -2435,6 +2461,10 @@ mod test {
 
                 let bytes = p1_secret_key.to_bytes();
                 assert_eq!(p1_secret_key, SecretKey::from_bytes(bytes).unwrap());
+
+                let p1_public_key = p1_secret_key.to_public();
+                let bytes = p1_public_key.to_bytes();
+                assert_eq!(p1_public_key, IndividualPublicKey::from_bytes(bytes).unwrap());
 
                 let bytes = p1_group_key.to_bytes();
                 assert_eq!(p1_group_key, GroupKey::from_bytes(bytes).unwrap());
