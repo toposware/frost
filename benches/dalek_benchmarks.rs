@@ -22,7 +22,6 @@ use frost_dalek::keygen::{
     Coefficients,
     DHPrivateKey,
     EncryptedSecretShare,
-    Error,
 };
 use frost_dalek::DistributedKeyGeneration;
 use frost_dalek::IndividualSecretKey;
@@ -167,90 +166,6 @@ mod dkg_benches {
         });
     }
 
-    fn generate_complaint(c: &mut Criterion) {
-        let params = Parameters { n: 3, t: 2 };
-
-        let (p1, p1coeffs, dh_sk1) = Participant::new(&params, 1, "Φ");
-        let (p2, _p2coeffs, _dh_sk2) = Participant::new(&params, 2, "Φ");
-        let (p3, _p3coeffs, _dh_sk3) = Participant::new(&params, 3, "Φ");
-
-        let mut p1_other_participants: Vec<Participant> = vec!(p2.clone(), p3.clone());
-        let p1_state = DistributedKeyGeneration::<_>::new(&params,
-                                                                 &dh_sk1,
-                                                                 &p1.index,
-                                                                 &p1coeffs,
-                                                                 &mut p1_other_participants,
-                                                                 "Φ").or(Err(())).unwrap();
-        let dh_key = (p3.dh_public_key * *dh_sk1).compress().to_bytes();
-
-        let bench_name = "Generate complaint";
-        c.bench_function(&bench_name, move |b| {
-            b.iter(|| p1_state.test_complaint(dh_key, p3.dh_public_key));
-        });
-    }
-
-    fn verify_complaint(c: &mut Criterion) {
-        let params = Parameters { n: 3, t: 2 };
-
-        let (p1, p1coeffs, dh_sk1) = Participant::new(&params, 1, "Φ");
-        let (p2, p2coeffs, dh_sk2) = Participant::new(&params, 2, "Φ");
-        let (p3, p3coeffs, dh_sk3) = Participant::new(&params, 3, "Φ");
-
-        let mut p1_other_participants: Vec<Participant> = vec!(p2.clone(), p3.clone());
-        let p1_state = DistributedKeyGeneration::<_>::new(&params,
-                                                                 &dh_sk1,
-                                                                 &p1.index,
-                                                                 &p1coeffs,
-                                                                 &mut p1_other_participants,
-                                                                 "Φ").or(Err(())).unwrap();
-        let p1_their_encrypted_secret_shares = p1_state.their_encrypted_secret_shares().unwrap();
-
-        let mut p2_other_participants: Vec<Participant> = vec!(p1.clone(), p3.clone());
-        let p2_state = DistributedKeyGeneration::<_>::new(&params,
-                                                                 &dh_sk2,
-                                                                 &p2.index,
-                                                                 &p2coeffs,
-                                                                 &mut p2_other_participants,
-                                                                 "Φ").or(Err(())).unwrap();
-        let p2_their_encrypted_secret_shares = p2_state.their_encrypted_secret_shares().unwrap();
-
-        let mut p3_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone());
-        let  p3_state = DistributedKeyGeneration::<_>::new(&params,
-                                                                  &dh_sk3,
-                                                                  &p3.index,
-                                                                  &p3coeffs,
-                                                                  &mut p3_other_participants,
-                                                                  "Φ").or(Err(())).unwrap();
-        let p3_their_encrypted_secret_shares = p3_state.their_encrypted_secret_shares().unwrap();
-
-        let wrong_encrypted_secret_share = EncryptedSecretShare {sender_index: 1,
-                                                                 receiver_index: 2,
-                                                                 nonce: [0; 16],
-                                                                 encrypted_polynomial_evaluation: [0; 32]};
-
-        let p1_my_encrypted_secret_shares = vec!(p2_their_encrypted_secret_shares[0].clone(),
-                                        p3_their_encrypted_secret_shares[0].clone());
-        // Wrong share inserted here!
-        let p2_my_encrypted_secret_shares = vec!(wrong_encrypted_secret_share.clone(),
-                                        p3_their_encrypted_secret_shares[1].clone());
-        let p3_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[1].clone(),
-                                       p2_their_encrypted_secret_shares[1].clone());
-
-        let _p1_state = p1_state.to_round_two(p1_my_encrypted_secret_shares).or(Err(())).unwrap();
-        let p3_state = p3_state.to_round_two(p3_my_encrypted_secret_shares).or(Err(())).unwrap();
-
-        let complaints = p2_state.to_round_two(p2_my_encrypted_secret_shares).unwrap_err();
-        let complaints = match complaints {
-            Error::Complaint(u) => u,
-            _ => vec![],
-        };
-
-        let bench_name = "Verify complaint";
-        c.bench_function(&bench_name, move |b| {
-            b.iter(|| p3_state.blame(&wrong_encrypted_secret_share, &complaints[0]));
-        });
-    }
-
     fn dkg_bench_with_t_out_of_n(n: u32, t: u32, c: &mut Criterion) {
         let name = t.to_string() + "-out-of-" + &n.to_string() + ": ";
         participant_new(&name, n, t, c);
@@ -261,8 +176,6 @@ mod dkg_benches {
 
     fn dkg_bench(c: &mut Criterion) {
         verify_zkp(c);
-        generate_complaint(c);
-        verify_complaint(c);
         dkg_bench_with_t_out_of_n(100, 34, c);
         dkg_bench_with_t_out_of_n(100, 67, c);
         dkg_bench_with_t_out_of_n(200, 67, c);

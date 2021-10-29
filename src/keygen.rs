@@ -195,7 +195,6 @@ use curve25519_dalek::traits::Identity;
 use rand::rngs::OsRng;
 use rand::RngCore;
 
-use sha2::Digest;
 use sha2::Sha512;
 
 use hkdf::Hkdf;
@@ -227,8 +226,6 @@ pub enum Error {
     InvalidGroupKey,
     /// The participant is missing some others' secret shares
     MissingShares,
-    /// At least one complaint has been issued during to_round_two() execution
-    Complaint(Vec::<Complaint>),
     /// Custom error
     Custom(String),
 }
@@ -253,9 +250,6 @@ impl fmt::Display for Error {
             },
             Error::MissingShares => {
                 write!(f, "Some shares are missing.")
-            },
-            Error::Complaint(complaints) => {
-                write!(f, "{:?}", complaints)
             },
             Error::Custom(string) => {
                 write!(f, "{:?}", string)
@@ -892,10 +886,6 @@ impl DistributedKeyGeneration<RoundOne> {
             self.state.their_encrypted_secret_shares = None;
         }
 
-        // RICE-FROST
-
-        let mut complaints: Vec<Complaint> = Vec::new();
-        
         if my_encrypted_secret_shares.len() != self.state.parameters.n as usize - 1 {
             return Err(Error::MissingShares);
         }
@@ -917,34 +907,8 @@ impl DistributedKeyGeneration<RoundOne> {
                     
                     for (index, commitment) in self.state.their_commitments.iter() {
                         if index == &encrypted_share.sender_index {
-                            // If the decrypted share is incorrect, P_i builds
-                            // a complaint
-
                             if decrypted_share.is_err() || decrypted_share_ref.as_ref().unwrap().verify(commitment).is_err() {
-
-                                let mut rng: OsRng = OsRng;
-                                let r = Scalar::random(&mut rng);
-
-                                let mut h = Sha512::new();
-                                h.update(self.state.dh_public_key.compress().to_bytes());
-                                h.update(pk.1.compress().to_bytes());
-                                h.update(dh_key);
-
-                                let h = Scalar::from_hash(h);
-
-                                complaints.push(
-                                    Complaint {
-                                        maker_index: encrypted_share.receiver_index,
-                                        accused_index: pk.0,
-                                        dh_key,
-                                        proof: ComplaintProof {
-                                            a1: &RISTRETTO_BASEPOINT_TABLE * &r,
-                                            a2: pk.1 * r,
-                                            z: r + h * self.state.dh_private_key.0,
-                                        }
-                                    }
-                                );
-                                break;
+                                return Err(Error::ShareVerificationError);
                             }
                         }
                     }
@@ -955,44 +919,12 @@ impl DistributedKeyGeneration<RoundOne> {
             }
         }
 
-        if !complaints.is_empty() {
-            return Err(Error::Complaint(complaints))
-        }
-
         self.state.my_secret_shares = Some(my_secret_shares);
 
         Ok(DistributedKeyGeneration::<RoundTwo> {
             state: self.state,
             data: RoundTwo {},
         })
-    }
-
-    /// Test-purpose only function for benchmarking complaint generation
-    pub fn test_complaint(
-        &self,
-        our_dh_secret_key_bytes: [u8; 32],
-        their_public_key: RistrettoPoint) -> Complaint
-    {
-        let mut rng: OsRng = OsRng;
-        let r = Scalar::random(&mut rng);
-
-        let mut h = Sha512::new();
-        h.update(self.state.dh_public_key.compress().to_bytes());
-        h.update(their_public_key.compress().to_bytes());
-        h.update(our_dh_secret_key_bytes);
-
-        let h = Scalar::from_hash(h);
-        
-        Complaint {
-            maker_index: 17,
-            accused_index: 42,
-            dh_key: our_dh_secret_key_bytes,
-            proof: ComplaintProof {
-                a1: &RISTRETTO_BASEPOINT_TABLE * &r,
-                a2: their_public_key * r,
-                z: r + h * self.state.dh_private_key.0,
-            }
-        }
     }
 }
 
@@ -1133,130 +1065,6 @@ impl EncryptedSecretShare {
     }
 }
 
-/// A proof that a generated complaint is valid. 
-#[derive(Debug, PartialEq)]
-pub struct ComplaintProof {
-    /// a1 = g^r.
-    pub a1: RistrettoPoint,
-    /// a2 = pk_l^r.
-    pub a2: RistrettoPoint,
-    /// z = r + H(pk_i, pk_l, k_il).sh_i
-    pub z: Scalar,
-}
-
-impl ComplaintProof {
-    /// Serialise this complaint proof to an array of bytes
-    pub fn to_bytes(&self) -> [u8; 96] {
-        let mut res = [0u8; 96];
-        res[0..32].copy_from_slice(&mut self.a1.compress().to_bytes());
-        res[32..64].copy_from_slice(&mut self.a2.compress().to_bytes());
-        res[64..96].copy_from_slice(&mut self.z.to_bytes());
-
-        res
-    }
-
-    /// Deserialise this slice of bytes to a `ComplaintProof`
-    pub fn from_bytes(bytes: &[u8]) -> Result<ComplaintProof, Error> {
-        let mut array = [0u8; 32];
-        array.copy_from_slice(&bytes[0..32]);
-        let a1 = CompressedRistretto(array)
-            .decompress()
-            .ok_or(Error::SerialisationError)?;
-
-        array.copy_from_slice(&bytes[32..64]);
-        let a2 = CompressedRistretto(array)
-            .decompress()
-            .ok_or(Error::SerialisationError)?;
-
-        array.copy_from_slice(&bytes[64..96]);
-        let z = Scalar::from_canonical_bytes(array)
-                .ok_or(Error::SerialisationError)?;
-
-        Ok(ComplaintProof { a1, a2, z })
-    }
-}
-
-/// A complaint generated when a participant receives a bad share.
-#[derive(Debug, PartialEq)]
-pub struct Complaint {
-    /// The index of the complaint maker.
-    pub maker_index: u32,
-    /// The index of the alleged misbehaving participant.
-    pub accused_index: u32,
-    /// The shared DH key.
-    pub dh_key: [u8; 32],
-    /// The complaint proof.
-    pub proof: ComplaintProof,
-}
-
-impl Complaint {
-    /// A complaint is valid if:
-    /// --  a1 + h.pk_i = z.g
-    /// --  a2 + h.k_il = z.pk_l
-    pub fn verify(
-        &self, 
-        pk_i: &RistrettoPoint,
-        pk_l: &RistrettoPoint,
-    ) -> Result<(), Error> {
-        let mut h = Sha512::new();
-        h.update(pk_i.compress().to_bytes());
-        h.update(pk_l.compress().to_bytes());
-        h.update(self.dh_key);
-
-        let h = Scalar::from_hash(h);
-
-        if self.proof.a1 + pk_i * h != &RISTRETTO_BASEPOINT_TABLE * &self.proof.z {
-            return Err(Error::ComplaintVerificationError)
-        }
-
-        if let Some(key_as_point) = CompressedRistretto::from_slice(&self.dh_key).decompress() {
-            if self.proof.a2 + key_as_point * h != pk_l * self.proof.z {
-                return Err(Error::ComplaintVerificationError)
-            }
-        } else {
-            return Err(Error::ComplaintVerificationError)
-        }
-
-        Ok(())
-    }
-
-    /// Serialise this complaint to an array of bytes
-    pub fn to_bytes(&self) -> [u8; 136] {
-        let mut res = [0u8; 136];
-        res[0..4].copy_from_slice(&mut self.maker_index.to_le_bytes());
-        res[4..8].copy_from_slice(&mut self.accused_index.to_le_bytes());
-        res[8..40].copy_from_slice(&mut self.dh_key.clone());
-        res[40..136].copy_from_slice(&mut self.proof.to_bytes());
-
-        res
-    }
-
-    /// Deserialise this slice of bytes to a `Complaint`
-    pub fn from_bytes(bytes: &[u8]) -> Result<Complaint, Error> {
-        let maker_index = u32::from_le_bytes(
-            bytes[0..4]
-                .try_into()
-                .map_err(|_| Error::SerialisationError)?,
-        );
-        let accused_index = u32::from_le_bytes(
-            bytes[4..8]
-                .try_into()
-                .map_err(|_| Error::SerialisationError)?,
-        );
-        let dh_key = bytes[8..40]
-            .try_into()
-            .map_err(|_| Error::SerialisationError)?;
-        let proof = ComplaintProof::from_bytes(&bytes[40..136])?;
-
-        Ok(Complaint {
-            maker_index,
-            accused_index,
-            dh_key,
-            proof,
-        })
-    }
-}
-
 /// During round two each participant verifies their secret shares they received
 /// from each other participant.
 #[derive(Clone, Debug)]
@@ -1312,58 +1120,6 @@ impl DistributedKeyGeneration<RoundTwo> {
         keys.push(*my_commitment);
 
         Ok(GroupKey(keys.iter().sum()))
-    }
-
-
-    /// Every participant can verify a complaint and determine who is the malicious
-    /// party. The relevant encrypted share is assumed to exist and publicly retrievable
-    /// by any participant.
-    pub fn blame(
-        &self,
-        encrypted_share: &EncryptedSecretShare,
-        complaint: &Complaint,
-    ) -> u32 {
-        let mut pk_maker = RistrettoPoint::identity();
-        let mut pk_accused = RistrettoPoint::identity();
-        let mut commitment_accused = VerifiableSecretSharingCommitment(Vec::new());
-
-        for (index, commitment) in self.state.their_commitments.iter() {
-            if index == &complaint.accused_index {
-                commitment_accused = commitment.clone();
-            }
-        }
-
-        if commitment_accused.0.is_empty() {
-            return complaint.maker_index;
-        }
-
-        for (index, pk) in self.state.their_dh_public_keys.iter() {
-            if index == &complaint.maker_index {
-                pk_maker = *pk;
-            }
-
-            else if index == &complaint.accused_index {
-                pk_accused = *pk;
-            }
-        };
-
-        if pk_maker == RistrettoPoint::identity() || pk_accused == RistrettoPoint::identity() {
-            return complaint.maker_index
-        }
-
-        if complaint.verify(&pk_maker, &pk_accused).is_err() {
-            return complaint.maker_index
-        }
-
-        let share = decrypt_share(encrypted_share, &complaint.dh_key);
-        if share.is_err() {
-            return complaint.accused_index
-        }
-
-        match share.unwrap().verify(&commitment_accused) {
-            Ok(()) => complaint.accused_index,
-            Err(_) => complaint.maker_index,
-        }
     }
 }
 
@@ -1919,85 +1675,6 @@ mod test {
     }
 
     #[test]
-    fn keygen_verify_complaint() {
-        fn do_test() -> Result<(), ()> {
-            let params = Parameters { n: 3, t: 2 };
-
-            let (p1, p1coeffs, dh_sk1) = Participant::new(&params, 1, "Φ");
-            let (p2, p2coeffs, dh_sk2) = Participant::new(&params, 2, "Φ");
-            let (p3, p3coeffs, dh_sk3) = Participant::new(&params, 3, "Φ");
-
-            p1.proof_of_secret_key.verify(&p1.index, &p1.public_key().unwrap(), "Φ").or(Err(()))?;
-            p2.proof_of_secret_key.verify(&p2.index, &p2.public_key().unwrap(), "Φ").or(Err(()))?;
-            p3.proof_of_secret_key.verify(&p3.index, &p3.public_key().unwrap(), "Φ").or(Err(()))?;
-
-            let mut p1_other_participants: Vec<Participant> = vec!(p2.clone(), p3.clone());
-            let p1_state = DistributedKeyGeneration::<RoundOne>::new(&params,
-                                                                     &dh_sk1,
-                                                                     &p1.index,
-                                                                     &p1coeffs,
-                                                                     &mut p1_other_participants,
-                                                                     "Φ").or(Err(()))?;
-            let p1_their_encrypted_secret_shares = p1_state.their_encrypted_secret_shares()?;
-
-            let mut p2_other_participants: Vec<Participant> = vec!(p1.clone(), p3.clone());
-            let p2_state = DistributedKeyGeneration::<RoundOne>::new(&params,
-                                                                     &dh_sk2,
-                                                                     &p2.index,
-                                                                     &p2coeffs,
-                                                                     &mut p2_other_participants,
-                                                                     "Φ").or(Err(()))?;
-            let p2_their_encrypted_secret_shares = p2_state.their_encrypted_secret_shares()?;
-
-            let mut p3_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone());
-            let  p3_state = DistributedKeyGeneration::<RoundOne>::new(&params,
-                                                                      &dh_sk3,
-                                                                      &p3.index,
-                                                                      &p3coeffs,
-                                                                      &mut p3_other_participants,
-                                                                      "Φ").or(Err(()))?;
-            let p3_their_encrypted_secret_shares = p3_state.their_encrypted_secret_shares()?;
-
-            let wrong_encrypted_secret_share = EncryptedSecretShare {sender_index: 1,
-                                                                     receiver_index: 2,
-                                                                     nonce: [0; 16],
-                                                                     encrypted_polynomial_evaluation: [0; 32]};
-
-            let p1_my_encrypted_secret_shares = vec!(p2_their_encrypted_secret_shares[0].clone(), // XXX FIXME indexing
-                                           p3_their_encrypted_secret_shares[0].clone());
-            // Wrong share inserted here!
-            let p2_my_encrypted_secret_shares = vec!(wrong_encrypted_secret_share.clone(),
-                                           p3_their_encrypted_secret_shares[1].clone());
-            let p3_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[1].clone(),
-                                           p2_their_encrypted_secret_shares[1].clone());
-
-            let p1_state = p1_state.to_round_two(p1_my_encrypted_secret_shares).or(Err(()))?;
-            let p3_state = p3_state.to_round_two(p3_my_encrypted_secret_shares).or(Err(()))?;
-
-
-            let complaints = p2_state.to_round_two(p2_my_encrypted_secret_shares);
-            assert!(complaints.is_err());
-            let complaints = complaints.unwrap_err();
-            if let Error::Complaint(complaints) = complaints {
-                assert!(complaints.len() == 1);
-
-                let bad_index = p3_state.blame(&wrong_encrypted_secret_share, &complaints[0]);
-                assert!(bad_index == 1);
-
-                let (p1_group_key, _p1_secret_key) = p1_state.finish(p1.public_key().unwrap()).or(Err(()))?;
-                let (p3_group_key, _p3_secret_key) = p3_state.finish(p3.public_key().unwrap()).or(Err(()))?;
-
-                assert!(p1_group_key.0.compress() == p3_group_key.0.compress());
-
-                Ok(())
-            } else {
-                Err(())
-            }
-        }
-        assert!(do_test().is_ok());
-    }
-
-    #[test]
     fn serialisation() {
         fn do_test() -> Result<(), ()> {
             let params = Parameters { n: 3, t: 2 };
@@ -2083,50 +1760,8 @@ mod test {
 
                 let bytes = p1_group_key.to_bytes();
                 assert_eq!(p1_group_key, GroupKey::from_bytes(bytes).unwrap());
-            }
 
-            {
-                let wrong_encrypted_secret_share = EncryptedSecretShare {sender_index: 1,
-                                                                         receiver_index: 2,
-                                                                         nonce: [0; 16],
-                                                                         encrypted_polynomial_evaluation: [0; 32]};
-
-                let p1_my_encrypted_secret_shares = vec!(p2_their_encrypted_secret_shares[0].clone(),
-                                               p3_their_encrypted_secret_shares[0].clone());
-                let p2_my_encrypted_secret_shares = vec!(wrong_encrypted_secret_share.clone(),
-                                               p3_their_encrypted_secret_shares[1].clone());
-                let p3_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[1].clone(),
-                                               p2_their_encrypted_secret_shares[1].clone());
-
-                let p1_state = p1_state.to_round_two(p1_my_encrypted_secret_shares).or(Err(()))?;
-                let p3_state = p3_state.to_round_two(p3_my_encrypted_secret_shares).or(Err(()))?;
-
-                let complaints = p2_state.to_round_two(p2_my_encrypted_secret_shares);
-                assert!(complaints.is_err());
-                let complaints = complaints.unwrap_err();
-                if let Error::Complaint(complaints) = complaints {
-                    assert!(complaints.len() == 1);
-
-                    let bad_index = p3_state.blame(&wrong_encrypted_secret_share, &complaints[0]);
-                    assert!(bad_index == 1);
-
-                    let (p1_group_key, _p1_secret_key) = p1_state.finish(p1.public_key().unwrap()).or(Err(()))?;
-                    let (p3_group_key, _p3_secret_key) = p3_state.finish(p3.public_key().unwrap()).or(Err(()))?;
-
-                    assert!(p1_group_key.0.compress() == p3_group_key.0.compress());
-
-                    // Check serialisation
-
-                    let bytes = complaints[0].proof.to_bytes();
-                    assert_eq!(complaints[0].proof, ComplaintProof::from_bytes(&bytes).unwrap());
-
-                    let bytes = complaints[0].to_bytes();
-                    assert_eq!(complaints[0], Complaint::from_bytes(&bytes).unwrap());
-
-                    Ok(())
-                } else {
-                    Err(())
-                }
+                Ok(())
             }
         }
 
