@@ -397,9 +397,9 @@
 //! # let bob_state = bob_state.to_round_two(bob_my_encrypted_secret_shares).or(Err(()))?;
 //! # let carol_state = carol_state.to_round_two(carol_my_encrypted_secret_shares).or(Err(()))?;
 //! #
-//! let (alice_group_key, alice_secret_key) = alice_state.finish(alice.public_key().unwrap()).or(Err(()))?;
-//! let (bob_group_key, bob_secret_key) = bob_state.finish(bob.public_key().unwrap()).or(Err(()))?;
-//! let (carol_group_key, carol_secret_key) = carol_state.finish(carol.public_key().unwrap()).or(Err(()))?;
+//! let (alice_group_key, alice_secret_key) = alice_state.finish(alice.commitments).or(Err(()))?;
+//! let (bob_group_key, bob_secret_key) = bob_state.finish(bob.commitments).or(Err(()))?;
+//! let (carol_group_key, carol_secret_key) = carol_state.finish(carol.commitments).or(Err(()))?;
 //!
 //! assert!(alice_group_key == bob_group_key);
 //! assert!(carol_group_key == bob_group_key);
@@ -462,9 +462,9 @@
 //! # let bob_state = bob_state.to_round_two(bob_my_encrypted_secret_shares).or(Err(()))?;
 //! # let carol_state = carol_state.to_round_two(carol_my_encrypted_secret_shares).or(Err(()))?;
 //! #
-//! # let (alice_group_key, alice_secret_key) = alice_state.finish(alice.public_key().unwrap()).or(Err(()))?;
-//! # let (bob_group_key, bob_secret_key) = bob_state.finish(bob.public_key().unwrap()).or(Err(()))?;
-//! # let (carol_group_key, carol_secret_key) = carol_state.finish(carol.public_key().unwrap()).or(Err(()))?;
+//! # let (alice_group_key, alice_secret_key) = alice_state.finish(alice.commitments).or(Err(()))?;
+//! # let (bob_group_key, bob_secret_key) = bob_state.finish(bob.commitments).or(Err(()))?;
+//! # let (carol_group_key, carol_secret_key) = carol_state.finish(carol.commitments).or(Err(()))?;
 //! #
 //! # let alice_public_key = alice_secret_key.to_public();
 //! # let bob_public_key = bob_secret_key.to_public();
@@ -537,9 +537,9 @@
 //! # let bob_state = bob_state.to_round_two(bob_my_encrypted_secret_shares).or(Err(()))?;
 //! # let carol_state = carol_state.to_round_two(carol_my_encrypted_secret_shares).or(Err(()))?;
 //! #
-//! # let (alice_group_key, alice_secret_key) = alice_state.finish(alice.public_key().unwrap()).or(Err(()))?;
-//! # let (bob_group_key, bob_secret_key) = bob_state.finish(bob.public_key().unwrap()).or(Err(()))?;
-//! # let (carol_group_key, carol_secret_key) = carol_state.finish(carol.public_key().unwrap()).or(Err(()))?;
+//! # let (alice_group_key, alice_secret_key) = alice_state.finish(alice.commitments).or(Err(()))?;
+//! # let (bob_group_key, bob_secret_key) = bob_state.finish(bob.commitments).or(Err(()))?;
+//! # let (carol_group_key, carol_secret_key) = carol_state.finish(carol.commitments).or(Err(()))?;
 //! #
 //! # let alice_public_key = alice_secret_key.to_public();
 //! # let bob_public_key = bob_secret_key.to_public();
@@ -615,9 +615,9 @@
 //! # let bob_state = bob_state.to_round_two(bob_my_encrypted_secret_shares).or(Err(""))?;
 //! # let carol_state = carol_state.to_round_two(carol_my_encrypted_secret_shares).or(Err(""))?;
 //! #
-//! # let (alice_group_key, alice_secret_key) = alice_state.finish(alice.public_key().unwrap()).or(Err(""))?;
-//! # let (bob_group_key, bob_secret_key) = bob_state.finish(bob.public_key().unwrap()).or(Err(""))?;
-//! # let (carol_group_key, carol_secret_key) = carol_state.finish(carol.public_key().unwrap()).or(Err(""))?;
+//! # let (alice_group_key, alice_secret_key) = alice_state.finish(alice.commitments).or(Err(""))?;
+//! # let (bob_group_key, bob_secret_key) = bob_state.finish(bob.commitments).or(Err(""))?;
+//! # let (carol_group_key, carol_secret_key) = carol_state.finish(carol.commitments).or(Err(""))?;
 //! #
 //! # let alice_public_key = alice_secret_key.to_public();
 //! # let bob_public_key = bob_secret_key.to_public();

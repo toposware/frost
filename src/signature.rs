@@ -718,7 +718,7 @@ mod test {
                                                                  "Φ").unwrap();
         let p1_my_encrypted_secret_shares = Vec::new();
         let p1_state = p1_state.to_round_two(p1_my_encrypted_secret_shares).unwrap();
-        let result = p1_state.finish(p1.public_key().unwrap());
+        let result = p1_state.finish(p1.commitments.points);
 
         assert!(result.is_ok());
 
@@ -768,7 +768,7 @@ mod test {
         let p1_my_encrypted_secret_shares = Vec::with_capacity(0);
         let p1_state = p1_state.to_round_two(p1_my_encrypted_secret_shares).unwrap();
 
-        let (group_key, p1_sk) = p1_state.finish(p1.public_key().unwrap()).unwrap();
+        let (group_key, p1_sk) = p1_state.finish(p1.commitments.points).unwrap();
 
         let context = b"CONTEXT STRING STOLEN FROM DALEK TEST SUITE";
         let message = b"This is a test of the tsunami alert system. This is only a test.";
@@ -823,8 +823,8 @@ mod test {
         let p1_state = p1_state.to_round_two(p1_my_encrypted_secret_shares).unwrap();
         let p2_state = p2_state.to_round_two(p2_my_encrypted_secret_shares).unwrap();
 
-        let (group_key, p1_sk) = p1_state.finish(p1.public_key().unwrap()).unwrap();
-        let (_, _p2_sk) = p2_state.finish(p2.public_key().unwrap()).unwrap();
+        let (group_key, p1_sk) = p1_state.finish(p1.commitments.points).unwrap();
+        let (_, _p2_sk) = p2_state.finish(p2.commitments.points).unwrap();
 
         let context = b"CONTEXT STRING STOLEN FROM DALEK TEST SUITE";
         let message = b"This is a test of the tsunami alert system. This is only a test.";
@@ -934,11 +934,11 @@ mod test {
         let p4_state = p4_state.to_round_two(p4_my_encrypted_secret_shares).unwrap();
         let p5_state = p5_state.to_round_two(p5_my_encrypted_secret_shares).unwrap();
 
-        let (group_key, p1_sk) = p1_state.finish(p1.public_key().unwrap()).unwrap();
-        let (_, _) = p2_state.finish(p2.public_key().unwrap()).unwrap();
-        let (_, p3_sk) = p3_state.finish(p3.public_key().unwrap()).unwrap();
-        let (_, p4_sk) = p4_state.finish(p4.public_key().unwrap()).unwrap();
-        let (_, _) = p5_state.finish(p5.public_key().unwrap()).unwrap();
+        let (group_key, p1_sk) = p1_state.finish(p1.commitments.points).unwrap();
+        let (_, _) = p2_state.finish(p2.commitments.points).unwrap();
+        let (_, p3_sk) = p3_state.finish(p3.commitments.points).unwrap();
+        let (_, p4_sk) = p4_state.finish(p4.commitments.points).unwrap();
+        let (_, _) = p5_state.finish(p5.commitments.points).unwrap();
 
         let context = b"CONTEXT STRING STOLEN FROM DALEK TEST SUITE";
         let message = b"This is a test of the tsunami alert system. This is only a test.";
@@ -1020,9 +1020,9 @@ mod test {
             let p2_state = p2_state.to_round_two(p2_my_encrypted_secret_shares).or(Err(()))?;
             let p3_state = p3_state.to_round_two(p3_my_encrypted_secret_shares).or(Err(()))?;
 
-            let (p1_group_key, p1_secret_key) = p1_state.finish(p1.public_key().unwrap()).or(Err(()))?;
-            let (p2_group_key, p2_secret_key) = p2_state.finish(p2.public_key().unwrap()).or(Err(()))?;
-            let (p3_group_key, p3_secret_key) = p3_state.finish(p3.public_key().unwrap()).or(Err(()))?;
+            let (p1_group_key, p1_secret_key) = p1_state.finish(p1.commitments.points).or(Err(()))?;
+            let (p2_group_key, p2_secret_key) = p2_state.finish(p2.commitments.points).or(Err(()))?;
+            let (p3_group_key, p3_secret_key) = p3_state.finish(p3.commitments.points).or(Err(()))?;
 
             assert!(p1_group_key.0.compress() == p2_group_key.0.compress());
             assert!(p2_group_key.0.compress() == p3_group_key.0.compress());
@@ -1153,9 +1153,9 @@ mod test {
             let p2_state = p2_state.to_round_two(p2_my_encrypted_secret_shares).or(Err(()))?;
             let p3_state = p3_state.to_round_two(p3_my_encrypted_secret_shares).or(Err(()))?;
 
-            let (p1_group_key, p1_secret_key) = p1_state.finish(p1.public_key().unwrap()).or(Err(()))?;
-            let (p2_group_key, p2_secret_key) = p2_state.finish(p2.public_key().unwrap()).or(Err(()))?;
-            let (p3_group_key, p3_secret_key) = p3_state.finish(p3.public_key().unwrap()).or(Err(()))?;
+            let (p1_group_key, p1_secret_key) = p1_state.finish(p1.commitments.points).or(Err(()))?;
+            let (p2_group_key, p2_secret_key) = p2_state.finish(p2.commitments.points).or(Err(()))?;
+            let (p3_group_key, p3_secret_key) = p3_state.finish(p3.commitments.points).or(Err(()))?;
 
             assert!(p1_group_key.0.compress() == p2_group_key.0.compress());
             assert!(p2_group_key.0.compress() == p3_group_key.0.compress());

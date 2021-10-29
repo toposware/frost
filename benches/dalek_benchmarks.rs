@@ -151,9 +151,9 @@ mod dkg_benches {
         let p1_state = p1_state.to_round_two(p1_my_encrypted_secret_shares).unwrap();
 
         c.bench_function("Finish", move |b| {
-            let pk = participants[0].public_key().unwrap();
+            let comm = &participants[0].commitments.points;
 
-            b.iter(|| p1_state.clone().finish(pk));
+            b.iter(|| p1_state.clone().finish(comm.clone()));
         });
     }
 
@@ -226,15 +226,15 @@ mod sign_benches {
         }
 
         let mut participants_secret_keys = Vec::<IndividualSecretKey>::with_capacity(THRESHOLD_OF_PARTICIPANTS as usize);
-        let (group_key, p1_sk) = participants_states_2[0].clone().finish(participants[1].public_key().unwrap()).unwrap();
+        let (group_key, p1_sk) = participants_states_2[0].clone().finish(participants[1].clone().commitments.points).unwrap();
         participants_secret_keys.push(p1_sk);
 
         for i in 2..THRESHOLD_OF_PARTICIPANTS+1 {
-            let (_, pi_sk) = participants_states_2[(i-1) as usize].clone().finish(participants[(i-1) as usize].public_key().unwrap()).unwrap();
+            let (_, pi_sk) = participants_states_2[(i-1) as usize].clone().finish(participants[(i-1) as usize].clone().commitments.points).unwrap();
             participants_secret_keys.push(pi_sk);
         }
         for i in (THRESHOLD_OF_PARTICIPANTS+2)..NUMBER_OF_PARTICIPANTS+1 {
-            let (_, _) = participants_states_2[(i-1) as usize].clone().finish(participants[(i-1) as usize].public_key().unwrap()).unwrap();
+            let (_, _) = participants_states_2[(i-1) as usize].clone().finish(participants[(i-1) as usize].clone().commitments.points).unwrap();
         }
 
         let context = b"CONTEXT STRING STOLEN FROM DALEK TEST SUITE";
@@ -318,15 +318,15 @@ mod sign_benches {
         }
 
         let mut participants_secret_keys = Vec::<IndividualSecretKey>::with_capacity(THRESHOLD_OF_PARTICIPANTS as usize);
-        let (group_key, p1_sk) = participants_states_2[0].clone().finish(participants[1].public_key().unwrap()).unwrap();
+        let (group_key, p1_sk) = participants_states_2[0].clone().finish(participants[1].clone().commitments.points).unwrap();
         participants_secret_keys.push(p1_sk);
 
         for i in 2..THRESHOLD_OF_PARTICIPANTS+1 {
-            let (_, pi_sk) = participants_states_2[(i-1) as usize].clone().finish(participants[(i-1) as usize].public_key().unwrap()).unwrap();
+            let (_, pi_sk) = participants_states_2[(i-1) as usize].clone().finish(participants[(i-1) as usize].clone().commitments.points).unwrap();
             participants_secret_keys.push(pi_sk);
         }
         for i in (THRESHOLD_OF_PARTICIPANTS+2)..NUMBER_OF_PARTICIPANTS+1 {
-            let (_, _) = participants_states_2[(i-1) as usize].clone().finish(participants[(i-1) as usize].public_key().unwrap()).unwrap();
+            let (_, _) = participants_states_2[(i-1) as usize].clone().finish(participants[(i-1) as usize].clone().commitments.points).unwrap();
         }
 
         let context = b"CONTEXT STRING STOLEN FROM DALEK TEST SUITE";
@@ -420,15 +420,15 @@ mod sign_benches {
         }
 
         let mut participants_secret_keys = Vec::<IndividualSecretKey>::with_capacity(THRESHOLD_OF_PARTICIPANTS as usize);
-        let (group_key, p1_sk) = participants_states_2[0].clone().finish(participants[1].public_key().unwrap()).unwrap();
+        let (group_key, p1_sk) = participants_states_2[0].clone().finish(participants[1].clone().commitments.points).unwrap();
         participants_secret_keys.push(p1_sk);
 
         for i in 2..THRESHOLD_OF_PARTICIPANTS+1 {
-            let (_, pi_sk) = participants_states_2[(i-1) as usize].clone().finish(participants[(i-1) as usize].public_key().unwrap()).unwrap();
+            let (_, pi_sk) = participants_states_2[(i-1) as usize].clone().finish(participants[(i-1) as usize].clone().commitments.points).unwrap();
             participants_secret_keys.push(pi_sk);
         }
         for i in (THRESHOLD_OF_PARTICIPANTS+2)..NUMBER_OF_PARTICIPANTS+1 {
-            let (_, _) = participants_states_2[(i-1) as usize].clone().finish(participants[(i-1) as usize].public_key().unwrap()).unwrap();
+            let (_, _) = participants_states_2[(i-1) as usize].clone().finish(participants[(i-1) as usize].clone().commitments.points).unwrap();
         }
 
         let context = b"CONTEXT STRING STOLEN FROM DALEK TEST SUITE";

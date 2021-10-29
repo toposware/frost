@@ -151,9 +151,9 @@
 //!
 //! // Each participant can now derive their long-lived secret keys and the group's
 //! // public key.
-//! let (alice_group_key, alice_secret_key) = alice_state.finish(alice.public_key().unwrap()).or(Err(()))?;
-//! let (bob_group_key, bob_secret_key) = bob_state.finish(bob.public_key().unwrap()).or(Err(()))?;
-//! let (carol_group_key, carol_secret_key) = carol_state.finish(carol.public_key().unwrap()).or(Err(()))?;
+//! let (alice_group_key, alice_secret_key) = alice_state.finish(alice.commitments).or(Err(()))?;
+//! let (bob_group_key, bob_secret_key) = bob_state.finish(bob.commitments).or(Err(()))?;
+//! let (carol_group_key, carol_secret_key) = carol_state.finish(carol.commitments).or(Err(()))?;
 //!
 //! // They should all derive the same group public key.
 //! assert!(alice_group_key == bob_group_key);
@@ -206,6 +206,7 @@ use zeroize::Zeroize;
 
 use crate::nizk::NizkOfSecretKey;
 use crate::parameters::Parameters;
+use crate::signature::calculate_lagrange_coefficients;
 
 use aes::{Aes256, Aes256Ctr};
 use aes::cipher::{
@@ -321,7 +322,7 @@ pub struct VerifiableSecretSharingCommitment {
     /// The index of this participant.
     pub index: u32,
     /// The commitments to the participant's secret coefficients.
-    pub(crate) points: Vec<RistrettoPoint>,
+    pub points: Vec<RistrettoPoint>,
 }
 
 impl VerifiableSecretSharingCommitment {
@@ -331,6 +332,24 @@ impl VerifiableSecretSharingCommitment {
             return Some(&self.points[0]);
         }
         None
+    }
+
+    /// Evaluate g^P(i) without knowing the secret coefficients of the polynomial
+    pub fn evaluate_hiding(&self, term: &Scalar) -> RistrettoPoint {
+        let mut sum = RistrettoPoint::identity();
+
+        // Evaluate using Horner's method.
+        for (k, coefficient) in self.points.iter().rev().enumerate() {
+            // The secret is the constant term in the polynomial
+            sum += coefficient;
+
+            if k != (self.points.len() - 1) {
+                sum *= term;
+            }
+        }
+
+        sum
+        
     }
 
     /// Serialise this commitment to the secret polynomial coefficients as a Vec of bytes
@@ -1407,7 +1426,7 @@ impl DistributedKeyGeneration<RoundTwo> {
     /// ```ignore
     /// let (group_key, secret_key) = state.finish(participant.public_key()?)?;
     /// ```
-    pub fn finish(mut self, my_commitment: &RistrettoPoint) -> Result<(GroupKey, SecretKey), Error> {
+    pub fn finish(mut self, my_commitment: Vec<RistrettoPoint>) -> Result<(GroupKey, SecretKey), Error> {
         let secret_key = self.calculate_signing_key()?;
         let group_key = self.calculate_group_key(my_commitment)?;
 
@@ -1418,15 +1437,37 @@ impl DistributedKeyGeneration<RoundTwo> {
     }
 
     /// Calculate this threshold signing participant's long-lived secret signing
-    /// key by summing all of the polynomial evaluations from the other
+    /// key by interpolating all of the polynomial evaluations from the other
     /// participants.
     pub(crate) fn calculate_signing_key(&self) -> Result<SecretKey, Error> {
         let my_secret_shares = self.state.my_secret_shares
             .as_ref()
             .ok_or(Error::Custom("Could not retrieve participant's secret shares".to_string()))?;
-        let mut key = my_secret_shares.iter().map(|x| x.polynomial_evaluation).sum();
 
-        key += self.state.my_secret_share.polynomial_evaluation;
+        let mut index_vector: Vec<u32> = Vec::new();
+
+        for share in my_secret_shares.iter() {
+            index_vector.push(share.sender_index);
+        }
+
+        index_vector.push(self.state.my_secret_share.sender_index);
+
+        let mut key = Scalar::zero();
+
+        for share in my_secret_shares.iter() {
+            let coeff = match calculate_lagrange_coefficients(&share.sender_index, &index_vector) {
+                Ok(s) => s,
+                Err(error) => return Err(Error::Custom(error.to_string())),
+            };
+            key += share.polynomial_evaluation * coeff;
+        }
+
+        let my_coeff = match calculate_lagrange_coefficients(&self.state.my_secret_share.sender_index, &index_vector) {
+                Ok(s) => s,
+                Err(error) => return Err(Error::Custom(error.to_string())),
+            };
+
+        key += self.state.my_secret_share.polynomial_evaluation * my_coeff;
 
         Ok(SecretKey { index: self.state.my_secret_share.sender_index, key })
     }
@@ -1436,18 +1477,56 @@ impl DistributedKeyGeneration<RoundTwo> {
     /// # Returns
     ///
     /// A [`GroupKey`] for the set of participants.
-    pub(crate) fn calculate_group_key(&self, my_commitment: &RistrettoPoint) -> Result<GroupKey, Error> {
-        let mut keys: Vec<RistrettoPoint> = Vec::with_capacity(self.state.parameters.n as usize);
+    ///
+    /// my_commitment is needed for now, but won't be when the distinction 
+    /// dealers/signers is implemented.
+    pub(crate) fn calculate_group_key(&self, my_commitment: Vec<RistrettoPoint>) -> Result<GroupKey, Error> {
+
+        let mut index_vector: Vec<u32> = Vec::new();
 
         for commitment in self.state.their_commitments.iter() {
-            match commitment.public_key() {
-                Some(key) => keys.push(*key),
-                None => return Err(Error::InvalidGroupKey),
-            }
+            index_vector.push(commitment.index);
         }
-        keys.push(*my_commitment);
 
-        Ok(GroupKey(keys.iter().sum()))
+        index_vector.push(self.state.my_secret_share.sender_index);
+
+
+        let mut all_commitments = self.state.their_commitments.clone();
+        all_commitments.push(
+            VerifiableSecretSharingCommitment {
+                index: self.state.my_secret_share.sender_index,
+                points: my_commitment
+            }
+        );
+
+        let mut group_key = RistrettoPoint::identity();
+
+        // The group key is the interpolation at 0 of all verification shares.
+        for i in index_vector.iter() {
+
+            let mut public_verif_share = RistrettoPoint::identity();
+
+            // Verification share for participant i is the interpolation of its secret shares' hidings.
+            // A secret share hiding can be evaluated with the sender's commitment and the Horner method.
+            for commitment in all_commitments.iter() {
+
+                let term: Scalar = (*i).into();
+                let internal_coeff = match calculate_lagrange_coefficients(&commitment.index, &index_vector) {
+                    Ok(s) => s,
+                    Err(error) => return Err(Error::Custom(error.to_string())),
+                };
+                public_verif_share += internal_coeff * commitment.evaluate_hiding(&term);
+                    
+            }
+
+            let external_coeff = match calculate_lagrange_coefficients(&i, &index_vector) {
+                Ok(s) => s,
+                Err(error) => return Err(Error::Custom(error.to_string())),
+            };
+            group_key += external_coeff * public_verif_share; 
+        }
+
+        Ok(GroupKey(group_key))
     }
 
 
@@ -1809,7 +1888,7 @@ mod test {
                                                                  "Φ").unwrap();
         let p1_my_encrypted_secret_shares = Vec::new();
         let p1_state = p1_state.to_round_two(p1_my_encrypted_secret_shares).unwrap();
-        let result = p1_state.finish(p1.public_key().unwrap());
+        let result = p1_state.finish(p1.commitments.points);
 
         assert!(result.is_ok());
 
@@ -1910,23 +1989,39 @@ mod test {
         let p4_state = p4_state.to_round_two(p4_my_encrypted_secret_shares).unwrap();
         let p5_state = p5_state.to_round_two(p5_my_encrypted_secret_shares).unwrap();
 
-        let (p1_group_key, _p1_secret_key) = p1_state.finish(p1.public_key().unwrap()).unwrap();
-        let (p2_group_key, _p2_secret_key) = p2_state.finish(p2.public_key().unwrap()).unwrap();
-        let (p3_group_key, _p3_secret_key) = p3_state.finish(p3.public_key().unwrap()).unwrap();
-        let (p4_group_key, _p4_secret_key) = p4_state.finish(p4.public_key().unwrap()).unwrap();
-        let (p5_group_key, _p5_secret_key) = p5_state.finish(p5.public_key().unwrap()).unwrap();
+        let (p1_group_key, p1_secret_key) = p1_state.finish(p1.commitments.points).unwrap();
+        let (p2_group_key, p2_secret_key) = p2_state.finish(p2.commitments.points).unwrap();
+        let (p3_group_key, p3_secret_key) = p3_state.finish(p3.commitments.points).unwrap();
+        let (p4_group_key, p4_secret_key) = p4_state.finish(p4.commitments.points).unwrap();
+        let (p5_group_key, p5_secret_key) = p5_state.finish(p5.commitments.points).unwrap();
 
         assert!(p1_group_key.0.compress() == p2_group_key.0.compress());
         assert!(p2_group_key.0.compress() == p3_group_key.0.compress());
         assert!(p3_group_key.0.compress() == p4_group_key.0.compress());
         assert!(p4_group_key.0.compress() == p5_group_key.0.compress());
 
+        let mut group_secret_key = Scalar::zero();
+        let indices = [1, 2, 3, 4, 5];
+
+        group_secret_key += calculate_lagrange_coefficients(&1, &indices).unwrap()*p1_secret_key.key;
+        group_secret_key += calculate_lagrange_coefficients(&2, &indices).unwrap()*p2_secret_key.key;
+        group_secret_key += calculate_lagrange_coefficients(&3, &indices).unwrap()*p3_secret_key.key;
+        group_secret_key += calculate_lagrange_coefficients(&4, &indices).unwrap()*p4_secret_key.key;
+        group_secret_key += calculate_lagrange_coefficients(&5, &indices).unwrap()*p5_secret_key.key;
+
+        let group_key = &group_secret_key * &RISTRETTO_BASEPOINT_TABLE;
+
+        assert!(p5_group_key.0.compress() == group_key.compress())
+
+        // Not valid anymore
+        /*
         assert!(p5_group_key.0.compress() ==
                 (p1.public_key().unwrap() +
                  p2.public_key().unwrap() +
                  p3.public_key().unwrap() +
                  p4.public_key().unwrap() +
                  p5.public_key().unwrap()).compress());
+        */
     }
 
 
@@ -1981,9 +2076,9 @@ mod test {
             let p2_state = p2_state.to_round_two(p2_my_encrypted_secret_shares).or(Err(()))?;
             let p3_state = p3_state.to_round_two(p3_my_encrypted_secret_shares).or(Err(()))?;
 
-            let (p1_group_key, _p1_secret_key) = p1_state.finish(p1.public_key().unwrap()).or(Err(()))?;
-            let (p2_group_key, _p2_secret_key) = p2_state.finish(p2.public_key().unwrap()).or(Err(()))?;
-            let (p3_group_key, _p3_secret_key) = p3_state.finish(p3.public_key().unwrap()).or(Err(()))?;
+            let (p1_group_key, _p1_secret_key) = p1_state.finish(p1.commitments.points).or(Err(()))?;
+            let (p2_group_key, _p2_secret_key) = p2_state.finish(p2.commitments.points).or(Err(()))?;
+            let (p3_group_key, _p3_secret_key) = p3_state.finish(p3.commitments.points).or(Err(()))?;
 
             assert!(p1_group_key.0.compress() == p2_group_key.0.compress());
             assert!(p2_group_key.0.compress() == p3_group_key.0.compress());
@@ -2062,9 +2157,9 @@ mod test {
             let p2_state = p2_state.to_round_two(p2_my_encrypted_secret_shares).or(Err(()))?;
             let p3_state = p3_state.to_round_two(p3_my_encrypted_secret_shares).or(Err(()))?;
 
-            let (p1_group_key, _p1_secret_key) = p1_state.finish(p1.public_key().unwrap()).or(Err(()))?;
-            let (p2_group_key, _p2_secret_key) = p2_state.finish(p2.public_key().unwrap()).or(Err(()))?;
-            let (p3_group_key, _p3_secret_key) = p3_state.finish(p3.public_key().unwrap()).or(Err(()))?;
+            let (p1_group_key, _p1_secret_key) = p1_state.finish(p1.commitments.points).or(Err(()))?;
+            let (p2_group_key, _p2_secret_key) = p2_state.finish(p2.commitments.points).or(Err(()))?;
+            let (p3_group_key, _p3_secret_key) = p3_state.finish(p3.commitments.points).or(Err(()))?;
 
             assert!(p1_group_key.0.compress() == p2_group_key.0.compress());
             assert!(p2_group_key.0.compress() == p3_group_key.0.compress());
@@ -2141,8 +2236,8 @@ mod test {
                     let bad_index = p3_state.blame(&wrong_encrypted_secret_share, &complaints[0]);
                     assert!(bad_index == 1);
 
-                    let (p1_group_key, _p1_secret_key) = p1_state.finish(p1.public_key().unwrap()).or(Err(()))?;
-                    let (p3_group_key, _p3_secret_key) = p3_state.finish(p3.public_key().unwrap()).or(Err(()))?;
+                    let (p1_group_key, _p1_secret_key) = p1_state.finish(p1.clone().commitments.points).or(Err(()))?;
+                    let (p3_group_key, _p3_secret_key) = p3_state.finish(p3.clone().commitments.points).or(Err(()))?;
 
                     assert!(p1_group_key.0.compress() == p3_group_key.0.compress());
 
@@ -2178,8 +2273,8 @@ mod test {
                     let bad_index = p3_state.blame(&wrong_encrypted_secret_share, &complaints[0]);
                     assert!(bad_index == 1);
 
-                    let (p1_group_key, _p1_secret_key) = p1_state.finish(p1.public_key().unwrap()).or(Err(()))?;
-                    let (p3_group_key, _p3_secret_key) = p3_state.finish(p3.public_key().unwrap()).or(Err(()))?;
+                    let (p1_group_key, _p1_secret_key) = p1_state.finish(p1.clone().commitments.points).or(Err(()))?;
+                    let (p3_group_key, _p3_secret_key) = p3_state.finish(p3.clone().commitments.points).or(Err(()))?;
 
                     assert!(p1_group_key.0.compress() == p3_group_key.0.compress());
                 } else {
@@ -2191,9 +2286,9 @@ mod test {
             {
                 let dh_key = (p1.dh_public_key.0 * dh_sk1.0).compress().to_bytes();
                 let wrong_encrypted_secret_share = encrypt_share(
-                    &1,
                     &SecretShare {
-                        index: 1,
+                        sender_index: 1,
+                        receiver_index: 2,
                         polynomial_evaluation: Scalar::from(42u32)
                     },
                     &dh_key
@@ -2219,8 +2314,8 @@ mod test {
                     let bad_index = p3_state.blame(&wrong_encrypted_secret_share, &complaints[0]);
                     assert!(bad_index == 1);
 
-                    let (p1_group_key, _p1_secret_key) = p1_state.finish(p1.public_key().unwrap()).or(Err(()))?;
-                    let (p3_group_key, _p3_secret_key) = p3_state.finish(p3.public_key().unwrap()).or(Err(()))?;
+                    let (p1_group_key, _p1_secret_key) = p1_state.finish(p1.clone().commitments.points).or(Err(()))?;
+                    let (p3_group_key, _p3_secret_key) = p3_state.finish(p3.clone().commitments.points).or(Err(()))?;
 
                     assert!(p1_group_key.0.compress() == p3_group_key.0.compress());
                 } else {
@@ -2326,9 +2421,9 @@ mod test {
                 let p2_state = p2_state.clone().to_round_two(p2_my_encrypted_secret_shares).or(Err(()))?;
                 let p3_state = p3_state.clone().to_round_two(p3_my_encrypted_secret_shares).or(Err(()))?;
 
-                let (p1_group_key, p1_secret_key) = p1_state.clone().finish(p1.public_key().unwrap()).or(Err(()))?;
-                let (p2_group_key, _p2_secret_key) = p2_state.finish(p2.public_key().unwrap()).or(Err(()))?;
-                let (p3_group_key, _p3_secret_key) = p3_state.finish(p3.public_key().unwrap()).or(Err(()))?;
+                let (p1_group_key, p1_secret_key) = p1_state.clone().finish(p1.clone().commitments.points).or(Err(()))?;
+                let (p2_group_key, _p2_secret_key) = p2_state.finish(p2.commitments.points).or(Err(()))?;
+                let (p3_group_key, _p3_secret_key) = p3_state.finish(p3.clone().commitments.points).or(Err(()))?;
 
                 assert!(p1_group_key.0.compress() == p2_group_key.0.compress());
                 assert!(p2_group_key.0.compress() == p3_group_key.0.compress());
@@ -2372,10 +2467,11 @@ mod test {
                     assert!(complaints.len() == 1);
 
                     let bad_index = p3_state.blame(&wrong_encrypted_secret_share, &complaints[0]);
+
                     assert!(bad_index == 1);
 
-                    let (p1_group_key, _p1_secret_key) = p1_state.finish(p1.public_key().unwrap()).or(Err(()))?;
-                    let (p3_group_key, _p3_secret_key) = p3_state.finish(p3.public_key().unwrap()).or(Err(()))?;
+                    let (p1_group_key, _p1_secret_key) = p1_state.finish(p1.clone().commitments.points).or(Err(()))?;
+                    let (p3_group_key, _p3_secret_key) = p3_state.finish(p3.clone().commitments.points).or(Err(()))?;
 
                     assert!(p1_group_key.0.compress() == p3_group_key.0.compress());
 
@@ -2448,9 +2544,9 @@ mod test {
             let p2_state = p2_state.to_round_two(p2_my_encrypted_secret_shares).or(Err(()))?;
             let p3_state = p3_state.to_round_two(p3_my_encrypted_secret_shares).or(Err(()))?;
 
-            let (p1_group_key, p1_secret_key) = p1_state.finish(p1.public_key().unwrap()).or(Err(()))?;
-            let (p2_group_key, p2_secret_key) = p2_state.finish(p2.public_key().unwrap()).or(Err(()))?;
-            let (p3_group_key, p3_secret_key) = p3_state.finish(p3.public_key().unwrap()).or(Err(()))?;
+            let (p1_group_key, p1_secret_key) = p1_state.finish(p1.clone().commitments.points).or(Err(()))?;
+            let (p2_group_key, p2_secret_key) = p2_state.finish(p2.clone().commitments.points).or(Err(()))?;
+            let (p3_group_key, p3_secret_key) = p3_state.finish(p3.clone().commitments.points).or(Err(()))?;
 
             assert!(p1_group_key.0.compress() == p2_group_key.0.compress());
             assert!(p2_group_key.0.compress() == p3_group_key.0.compress());
