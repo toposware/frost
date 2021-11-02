@@ -1178,6 +1178,9 @@ mod test {
 
         // Check serialisation
 
+        let bytes = p1_secret_comshares.to_bytes();
+        assert_eq!(p1_secret_comshares, SecretCommitmentShareList::from_bytes(&bytes).unwrap());
+
         let bytes = p1_public_comshares.to_bytes();
         assert_eq!(p1_public_comshares, PublicCommitmentShareList::from_bytes(&bytes).unwrap());
 

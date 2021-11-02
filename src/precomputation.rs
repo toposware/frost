@@ -62,7 +62,7 @@ impl From<NoncePair> for CommitmentShare {
 }
 
 /// A pair of a nonce and a commitment to it.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct Commitment {
     /// The nonce.
     pub(crate) nonce: Scalar,
@@ -91,8 +91,33 @@ impl ConstantTimeEq for Commitment {
     }
 }
 
+impl Commitment {
+    /// Serialise this commitment to an array of bytes
+    pub fn to_bytes(&self) -> [u8; 64] {
+        let mut res = [0u8; 64];
+        res[0..32].copy_from_slice(&self.nonce.to_bytes());
+        res[32..64].copy_from_slice(&self.sealed.compress().to_bytes());
+
+        res
+    }
+
+    /// Deserialise this array of bytes to a `Commitment`
+    pub fn from_bytes(bytes: [u8; 64]) -> Result<Commitment, Error> {
+        let mut array = [0u8; 32];
+        array.copy_from_slice(&bytes[0..32]);
+        let nonce = Scalar::from_canonical_bytes(array).ok_or(Error::SerialisationError)?;
+
+        array.copy_from_slice(&bytes[32..64]);
+        let sealed = CompressedRistretto(array)
+            .decompress()
+            .ok_or(Error::SerialisationError)?;
+
+        Ok(Commitment { nonce, sealed })
+    }
+}
+
 /// A precomputed commitment share.
-#[derive(Clone, Debug, Zeroize)]
+#[derive(Clone, Debug, Eq, PartialEq, Zeroize)]
 #[zeroize(drop)]
 pub struct CommitmentShare {
     /// The hiding commitment.
@@ -117,14 +142,69 @@ impl CommitmentShare {
     pub fn publish(&self) -> (RistrettoPoint, RistrettoPoint) {
         (self.hiding.sealed, self.binding.sealed)
     }
+
+    /// Serialise this commitment share to an array of bytes
+    pub fn to_bytes(&self) -> [u8; 128] {
+        let mut res = [0u8; 128];
+        res[0..64].copy_from_slice(&self.hiding.to_bytes());
+        res[64..128].copy_from_slice(&self.binding.to_bytes());
+
+        res
+    }
+
+    /// Deserialise this array of bytes to a `CommitmentShare`
+    pub fn from_bytes(bytes: [u8; 128]) -> Result<CommitmentShare, Error> {
+        let mut array = [0u8; 64];
+        array.copy_from_slice(&bytes[0..64]);
+        let hiding = Commitment::from_bytes(array)?;
+
+        array.copy_from_slice(&bytes[64..128]);
+        let binding = Commitment::from_bytes(array)?;
+
+        Ok(CommitmentShare { hiding, binding })
+    }
 }
 
 /// A secret commitment share list, containing the revealed nonces for the
 /// hiding and binding commitments.
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct SecretCommitmentShareList {
     /// The secret commitment shares.
     pub commitments: Vec<CommitmentShare>,
+}
+
+impl SecretCommitmentShareList {
+    /// Serialise this secret commitment share list to a Vec of bytes
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut res = Vec::with_capacity(8 + 128 * self.commitments.len());
+
+        let len = self.commitments.len();
+        res.extend_from_slice(&mut TryInto::<u32>::try_into(len).unwrap().to_le_bytes());
+        for i in 0..len {
+            res.extend_from_slice(&mut self.commitments[i].to_bytes());
+        }
+
+        res
+    }
+
+    /// Deserialise this slice of bytes to a `PublicCommitmentShareList`
+    pub fn from_bytes(bytes: &[u8]) -> Result<SecretCommitmentShareList, Error> {
+        let len = u32::from_le_bytes(
+            bytes[0..4]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?,
+        );
+        let mut commitments: Vec<CommitmentShare> = Vec::with_capacity(len as usize);
+        let mut index_slice = 4;
+        let mut array = [0u8; 128];
+
+        for _ in 0..len {
+            array.copy_from_slice(&bytes[index_slice..index_slice + 128]);
+            commitments.push(CommitmentShare::from_bytes(array)?);
+            index_slice += 128;
+        }
+        Ok(SecretCommitmentShareList { commitments })
+    }
 }
 
 /// A public commitment share list, containing only the hiding and binding
