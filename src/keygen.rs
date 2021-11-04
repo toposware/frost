@@ -315,14 +315,20 @@ impl Coefficients {
 /// A commitment to a participant's secret polynomial coefficients for Feldman's
 /// verifiable secret sharing scheme.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct VerifiableSecretSharingCommitment(pub(crate) Vec<RistrettoPoint>);
+pub struct VerifiableSecretSharingCommitment {
+    /// The index of this participant.
+    pub index: u32,
+    /// The commitments to the participant's secret coefficients.
+    pub(crate) points: Vec<RistrettoPoint>,
+}
 
 impl VerifiableSecretSharingCommitment {
     /// Serialise this commitment to the secret polynomial coefficients as a Vec of bytes
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut res: Vec<u8> = Vec::with_capacity(self.0.len() * 32 + 4);
+        let mut res: Vec<u8> = Vec::with_capacity(self.points.len() * 32 + 8);
+        res.extend_from_slice(&self.index.to_le_bytes());
         let mut tmp = self
-            .0
+            .points
             .iter()
             .map(|e| e.compress().to_bytes())
             .collect::<Vec<[u8; 32]>>();
@@ -336,14 +342,19 @@ impl VerifiableSecretSharingCommitment {
 
     /// Deserialise this slice of bytes to a `VerifiableSecretSharingCommitment`
     pub fn from_bytes(bytes: &[u8]) -> Result<VerifiableSecretSharingCommitment, Error> {
-        let len = u32::from_le_bytes(
+        let index = u32::from_le_bytes(
             bytes[0..4]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?,
+        );
+        let len = u32::from_le_bytes(
+            bytes[4..8]
                 .try_into()
                 .map_err(|_| Error::SerialisationError)?,
         );
         let mut points: Vec<RistrettoPoint> =
             Vec::with_capacity(len as usize);
-        let mut index_slice = 4usize;
+        let mut index_slice = 8usize;
         let mut array = [0u8; 32];
 
         for _ in 0..len {
@@ -356,7 +367,7 @@ impl VerifiableSecretSharingCommitment {
             index_slice += 32;
         }
 
-        Ok(VerifiableSecretSharingCommitment(points))
+        Ok(VerifiableSecretSharingCommitment { index, points })
     }
 }
 
@@ -628,7 +639,7 @@ struct ActualState {
     /// A vector of tuples containing the index of each participant and that
     /// respective participant's commitments to their private polynomial
     /// coefficients.
-    their_commitments: Vec<(u32, VerifiableSecretSharingCommitment)>,
+    their_commitments: Vec<VerifiableSecretSharingCommitment>,
     /// A vector of ECPoints containing the index of each participant and that
     /// respective participant's DH public key.
     their_dh_public_keys: Vec<(u32, DHPublicKey)>,
@@ -647,15 +658,9 @@ impl ActualState {
         res.extend_from_slice(&mut self.parameters.to_bytes());
         res.extend_from_slice(&mut self.dh_private_key.to_bytes());
         res.extend_from_slice(&mut self.dh_public_key.to_bytes());
-        let mut tmp = self
-            .their_commitments
-            .iter()
-            .map(|e| (e.0.to_le_bytes(), e.1.to_bytes()))
-            .collect::<Vec<([u8; 4], Vec<u8>)>>();
-        res.extend_from_slice(&mut TryInto::<u32>::try_into(tmp.len()).unwrap().to_le_bytes());
-        for (index, commitments) in tmp.iter_mut() {
-            res.extend_from_slice(index);
-            res.extend_from_slice(commitments);
+        res.extend_from_slice(&mut TryInto::<u32>::try_into(self.their_commitments.len()).unwrap().to_le_bytes());
+        for commitments in self.their_commitments.iter() {
+            res.extend_from_slice(&commitments.to_bytes());
         }
         let mut tmp = self
             .their_dh_public_keys
@@ -716,19 +721,14 @@ impl ActualState {
                 .try_into()
                 .map_err(|_| Error::SerialisationError)?,
         );
-        let mut their_commitments: Vec<(u32, VerifiableSecretSharingCommitment)> = 
+        let mut their_commitments: Vec<VerifiableSecretSharingCommitment> = 
             Vec::with_capacity(commit_len as usize);
 
         let mut index_slice = 76 as usize;
         for _ in 0..commit_len {
-            let index = u32::from_le_bytes(
-                bytes[index_slice..index_slice+4]
-                    .try_into()
-                    .map_err(|_| Error::SerialisationError)?,
-            );
-            let verifiable_commitment = VerifiableSecretSharingCommitment::from_bytes(&bytes[index_slice+4..])?;
-            their_commitments.push((index, verifiable_commitment.clone()));
-            index_slice += 8 + verifiable_commitment.0.len() * 32;
+            let verifiable_commitment = VerifiableSecretSharingCommitment::from_bytes(&bytes[index_slice..])?;
+            their_commitments.push(verifiable_commitment.clone());
+            index_slice += 8 + verifiable_commitment.points.len() * 32;
         }
 
         let dh_key_len = u32::from_le_bytes(
@@ -928,7 +928,7 @@ impl DistributedKeyGeneration<RoundOne> {
         context_string: &str,
     ) -> Result<Self, Vec<u32>>
     {
-        let mut their_commitments: Vec<(u32, VerifiableSecretSharingCommitment)> = Vec::with_capacity(parameters.t as usize);
+        let mut their_commitments: Vec<VerifiableSecretSharingCommitment> = Vec::with_capacity(parameters.t as usize);
         let mut their_dh_public_keys: Vec<(u32, DHPublicKey)> = Vec::with_capacity(parameters.t as usize);
         let mut misbehaving_participants: Vec<u32> = Vec::new();
 
@@ -953,7 +953,12 @@ impl DistributedKeyGeneration<RoundOne> {
             };
             match p.proof_of_secret_key.verify(&p.index, &public_key, &context_string) {
                 Ok(_)  => {
-                            their_commitments.push((p.index, VerifiableSecretSharingCommitment(p.commitments.clone())));
+                            their_commitments.push(
+                                VerifiableSecretSharingCommitment {
+                                    index: p.index,
+                                    points: p.commitments.clone()
+                                }
+                            );
                             their_dh_public_keys.push((p.index, p.dh_public_key.clone()));
 
                             match p.proof_of_dh_private_key.verify(&p.index, &p.dh_public_key, &context_string) {
@@ -1052,8 +1057,8 @@ impl DistributedKeyGeneration<RoundOne> {
                     let decrypted_share = decrypt_share(&encrypted_share, &dh_key);
                     let decrypted_share_ref = &decrypted_share;
                     
-                    for (index, commitment) in self.state.their_commitments.iter() {
-                        if index == &encrypted_share.sender_index {
+                    for commitment in self.state.their_commitments.iter() {
+                        if commitment.index == encrypted_share.sender_index {
                             // If the decrypted share is incorrect, P_i builds
                             // a complaint
 
@@ -1169,10 +1174,10 @@ impl SecretShare {
         let term: Scalar = self.index.into();
         let mut rhs: RistrettoPoint = RistrettoPoint::identity();
 
-        for (index, com) in commitment.0.iter().rev().enumerate() {
+        for (index, com) in commitment.points.iter().rev().enumerate() {
             rhs += com;
 
-            if index != (commitment.0.len() - 1) {
+            if index != (commitment.points.len() - 1) {
                 rhs *= term;
             }
         }
@@ -1438,7 +1443,7 @@ impl DistributedKeyGeneration<RoundTwo> {
         let mut keys: Vec<RistrettoPoint> = Vec::with_capacity(self.state.parameters.n as usize);
 
         for commitment in self.state.their_commitments.iter() {
-            match commitment.1.0.get(0) {
+            match commitment.points.get(0) {
                 Some(key) => keys.push(*key),
                 None => return Err(Error::InvalidGroupKey),
             }
@@ -1459,15 +1464,15 @@ impl DistributedKeyGeneration<RoundTwo> {
     ) -> u32 {
         let mut pk_maker = RistrettoPoint::identity();
         let mut pk_accused = RistrettoPoint::identity();
-        let mut commitment_accused = VerifiableSecretSharingCommitment(Vec::new());
+        let mut commitment_accused = VerifiableSecretSharingCommitment { index: 0, points: Vec::new() };
 
-        for (index, commitment) in self.state.their_commitments.iter() {
-            if index == &complaint.accused_index {
+        for commitment in self.state.their_commitments.iter() {
+            if commitment.index == complaint.accused_index {
                 commitment_accused = commitment.clone();
             }
         }
 
-        if commitment_accused.0.is_empty() {
+        if commitment_accused.points.is_empty() {
             return complaint.maker_index;
         }
 
@@ -1706,10 +1711,10 @@ mod test {
 
         assert!(share.polynomial_evaluation == Scalar::from(5u8));
 
-        let mut commitments = VerifiableSecretSharingCommitment(Vec::new());
+        let mut commitments = VerifiableSecretSharingCommitment { index: 1, points: Vec::new() };
 
         for i in 0..5 {
-            commitments.0.push(&RISTRETTO_BASEPOINT_TABLE * &coefficients.0[i]);
+            commitments.points.push(&RISTRETTO_BASEPOINT_TABLE * &coefficients.0[i]);
         }
 
         assert!(share.verify(&commitments).is_ok());
@@ -1728,10 +1733,10 @@ mod test {
 
         assert!(share.polynomial_evaluation == Scalar::one());
 
-        let mut commitments = VerifiableSecretSharingCommitment(Vec::new());
+        let mut commitments = VerifiableSecretSharingCommitment { index: 1, points: Vec::new() };
 
         for i in 0..5 {
-            commitments.0.push(&RISTRETTO_BASEPOINT_TABLE * &coefficients.0[i]);
+            commitments.points.push(&RISTRETTO_BASEPOINT_TABLE * &coefficients.0[i]);
         }
 
         assert!(share.verify(&commitments).is_ok());
