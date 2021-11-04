@@ -1532,7 +1532,6 @@ impl IndividualPublicKey {
     ///
     /// # Inputs
     ///
-    /// * The [`Parameters`] of this threshold signing instance, and
     /// * A vector of `commitments` regarding the secret polynomial
     ///   [`Coefficients`] that this [`IndividualPublicKey`] was generated with.
     ///
@@ -1540,21 +1539,30 @@ impl IndividualPublicKey {
     ///
     /// A `Result` with either an empty `Ok` or `Err` value, depending on
     /// whether or not the verification was successful.
-    #[allow(unused)]
     pub fn verify(
         &self,
-        parameters: &Parameters,
-        commitments: &[RistrettoPoint],
-    ) -> Result<(), ()>
+        commitments: &[VerifiableSecretSharingCommitment],
+    ) -> Result<(), Error>
     {
-        let rhs = RistrettoPoint::identity();
+        let mut rhs: RistrettoPoint = RistrettoPoint::identity();
+        let term: Scalar = self.index.into();
 
-        for j in 1..parameters.n {
-            for k in 0..parameters.t {
-                // XXX ah shit we need the incoming commitments to be sorted or have indices
+        for commitment in commitments.iter() {
+            let mut tmp: RistrettoPoint = RistrettoPoint::identity();
+            for (index, com) in commitment.points.iter().rev().enumerate() {
+                tmp += com;
+
+                if index != (commitment.points.len() - 1) {
+                    tmp *= term;
+                }
             }
+            rhs += tmp;
         }
-        unimplemented!()
+
+        match self.share.compress() == rhs.compress() {
+            true => Ok(()),
+            false => Err(Error::ShareVerificationError),
+        }
     }
 
     /// Serialise this individual public key to an array of bytes.
@@ -2321,6 +2329,84 @@ mod test {
             }
         }
 
+        assert!(do_test().is_ok());
+    }
+
+    #[test]
+    fn individual_public_key_share() {
+        fn do_test() -> Result<(), ()> {
+            let params = Parameters { n: 3, t: 2 };
+
+            let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, 1, "Φ");
+            let (p2, p2coeffs, p2_dh_sk) = Participant::new(&params, 2, "Φ");
+            let (p3, p3coeffs, p3_dh_sk) = Participant::new(&params, 3, "Φ");
+
+            p1.proof_of_secret_key.verify(&p1.index, &p1.public_key().unwrap(), "Φ").or(Err(()))?;
+            p2.proof_of_secret_key.verify(&p2.index, &p2.public_key().unwrap(), "Φ").or(Err(()))?;
+            p3.proof_of_secret_key.verify(&p3.index, &p3.public_key().unwrap(), "Φ").or(Err(()))?;
+
+            let mut p1_other_participants: Vec<Participant> = vec!(p2.clone(), p3.clone());
+            let p1_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+                                                                     &p1_dh_sk,
+                                                                     &p1.index,
+                                                                     &p1coeffs,
+                                                                     &mut p1_other_participants,
+                                                                     "Φ").or(Err(()))?;
+            let p1_their_encrypted_secret_shares = p1_state.their_encrypted_secret_shares()?;
+
+            let mut p2_other_participants: Vec<Participant> = vec!(p1.clone(), p3.clone());
+            let p2_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+                                                                     &p2_dh_sk,
+                                                                     &p2.index,
+                                                                     &p2coeffs,
+                                                                     &mut p2_other_participants,
+                                                                     "Φ").or(Err(()))?;
+            let p2_their_encrypted_secret_shares = p2_state.their_encrypted_secret_shares()?;
+
+            let mut p3_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone());
+            let  p3_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+                                                                      &p3_dh_sk,
+                                                                      &p3.index,
+                                                                      &p3coeffs,
+                                                                      &mut p3_other_participants,
+                                                                      "Φ").or(Err(()))?;
+            let p3_their_encrypted_secret_shares = p3_state.their_encrypted_secret_shares()?;
+
+            let p1_my_encrypted_secret_shares = vec!(p2_their_encrypted_secret_shares[0].clone(), // XXX FIXME indexing
+                                           p3_their_encrypted_secret_shares[0].clone());
+            let p2_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[0].clone(),
+                                           p3_their_encrypted_secret_shares[1].clone());
+            let p3_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[1].clone(),
+                                           p2_their_encrypted_secret_shares[1].clone());
+
+            let p1_state = p1_state.to_round_two(p1_my_encrypted_secret_shares).or(Err(()))?;
+            let p2_state = p2_state.to_round_two(p2_my_encrypted_secret_shares).or(Err(()))?;
+            let p3_state = p3_state.to_round_two(p3_my_encrypted_secret_shares).or(Err(()))?;
+
+            let (p1_group_key, p1_secret_key) = p1_state.finish(p1.public_key().unwrap()).or(Err(()))?;
+            let (p2_group_key, p2_secret_key) = p2_state.finish(p2.public_key().unwrap()).or(Err(()))?;
+            let (p3_group_key, p3_secret_key) = p3_state.finish(p3.public_key().unwrap()).or(Err(()))?;
+
+            assert!(p1_group_key.0.compress() == p2_group_key.0.compress());
+            assert!(p2_group_key.0.compress() == p3_group_key.0.compress());
+
+            // Check the validity of each IndividualPublicKey
+
+            let p1_public_key = p1_secret_key.to_public();
+            let p2_public_key = p2_secret_key.to_public();
+            let p3_public_key = p3_secret_key.to_public();
+
+            // The order does not matter
+            let commitments = [p2.commitments, p3.commitments, p1.commitments];
+
+            assert!(p1_public_key.verify(&commitments).is_ok());
+            assert!(p2_public_key.verify(&commitments).is_ok());
+            assert!(p3_public_key.verify(&commitments).is_ok());
+
+            assert!(p1_public_key.verify(&commitments[1..]).is_err());
+
+            Ok(())
+        }
         assert!(do_test().is_ok());
     }
 }
