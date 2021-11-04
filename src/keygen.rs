@@ -1565,6 +1565,51 @@ impl IndividualPublicKey {
         }
     }
 
+    /// Any participant can compute the public verification share of any other participant.
+    ///
+    /// This is done by re-computing each [`IndividualPublicKey`] as \\(Y\_i\\) s.t.:
+    ///
+    /// \\[
+    /// Y\_i = \prod\_{j=1}^{n} \prod\_{k=0}^{t-1} \phi\_{jk}^{i^{k} \mod q}
+    /// \\]
+    ///
+    /// for each [`Participant`] index \\(i\\).
+    ///
+    /// # Inputs
+    ///
+    /// * A `participant_index` and
+    /// * A vector of `commitments` regarding the secret polynomial
+    ///   [`Coefficients`] that the [`IndividualPublicKey`] will be generated from.
+    ///
+    /// # Returns
+    ///
+    /// An `IndividualPublicKey`.
+    pub fn generate_from_commitments(
+        participant_index: u32,
+        commitments: &[VerifiableSecretSharingCommitment],
+    ) -> Self
+    {
+        let mut share: RistrettoPoint = RistrettoPoint::identity();
+        let term: Scalar = participant_index.into();
+
+        for commitment in commitments.iter() {
+            let mut tmp: RistrettoPoint = RistrettoPoint::identity();
+            for (index, com) in commitment.points.iter().rev().enumerate() {
+                tmp += com;
+
+                if index != (commitment.points.len() - 1) {
+                    tmp *= term;
+                }
+            }
+            share += tmp;
+        }
+
+        IndividualPublicKey {
+            index: participant_index,
+            share,
+        }
+    }
+
     /// Serialise this individual public key to an array of bytes.
     pub fn to_bytes(&self) -> [u8; 36] {
         let mut res = [0u8; 36];
@@ -2404,6 +2449,15 @@ mod test {
             assert!(p3_public_key.verify(&commitments).is_ok());
 
             assert!(p1_public_key.verify(&commitments[1..]).is_err());
+
+            // Check that the generated IndividualPublicKey from other participants match
+            let p1_recovered_public_key = IndividualPublicKey::generate_from_commitments(1, &commitments);
+            let p2_recovered_public_key = IndividualPublicKey::generate_from_commitments(2, &commitments);
+            let p3_recovered_public_key = IndividualPublicKey::generate_from_commitments(3, &commitments);
+
+            assert_eq!(p1_public_key, p1_recovered_public_key);
+            assert_eq!(p2_public_key, p2_recovered_public_key);
+            assert_eq!(p3_public_key, p3_recovered_public_key);
 
             Ok(())
         }
