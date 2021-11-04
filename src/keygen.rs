@@ -442,7 +442,7 @@ pub struct Participant {
     pub dh_public_key: DHPublicKey,
     /// A vector of Pedersen commitments to the coefficients of this
     /// participant's private polynomial.
-    pub commitments: Vec<RistrettoPoint>,
+    pub commitments: VerifiableSecretSharingCommitment,
     /// The zero-knowledge proof of knowledge of the secret key (a.k.a. the
     /// first coefficient in the private polynomial).  It is constructed as a
     /// Schnorr signature using \\( a_{i0} \\) as the signing key.
@@ -479,7 +479,7 @@ impl Participant {
         let t: usize = parameters.t as usize;
         let mut rng: OsRng = OsRng;
         let mut coefficients: Vec<Scalar> = Vec::with_capacity(t);
-        let mut commitments: Vec<RistrettoPoint> = Vec::with_capacity(t);
+        let mut commitments = VerifiableSecretSharingCommitment { index, points: Vec::with_capacity(t) };
 
         for _ in 0..t {
             coefficients.push(Scalar::random(&mut rng));
@@ -501,7 +501,7 @@ impl Participant {
         //         C_i = [\phi_{i0}, ..., \phi_{i(t-1)}], where \phi_{ij} = g^{a_{ij}},
         //         0 ≤ j ≤ t-1.
         for j in 0..t {
-            commitments.push(&coefficients.0[j] * &RISTRETTO_BASEPOINT_TABLE);
+            commitments.points.push(&coefficients.0[j] * &RISTRETTO_BASEPOINT_TABLE);
         }
 
         // Yes, I know the steps are out of order.  It saves one scalar multiplication.
@@ -510,7 +510,7 @@ impl Participant {
         //         a_{i0} by calculating a Schnorr signature \alpha_i = (s, R).  (In
         //         the FROST paper: \alpha_i = (\mu_i, c_i), but we stick with Schnorr's
         //         original notation here.)
-        let proof_of_secret_key: NizkOfSecretKey = NizkOfSecretKey::prove(&index, &coefficients.0[0], &commitments[0], &context_string, rng);
+        let proof_of_secret_key: NizkOfSecretKey = NizkOfSecretKey::prove(&index, &coefficients.0[0], &commitments.points[0], &context_string, rng);
 
         // Step 4: Every participant P_i broadcasts C_i, \alpha_i to all other participants.
         (Participant { index, dh_public_key, commitments, proof_of_secret_key, proof_of_dh_private_key }, coefficients, dh_private_key)
@@ -520,26 +520,18 @@ impl Participant {
     ///
     /// This is used to pass into the final call to `DistributedKeyGeneration::<RoundTwo>.finish()`.
     pub fn public_key(&self) -> Option<&RistrettoPoint> {
-        if !self.commitments.is_empty() {
-            return Some(&self.commitments[0]);
+        if !self.commitments.points.is_empty() {
+            return Some(&self.commitments.points[0]);
         }
         None
     }
 
     /// Serialise this participant to a Vec of bytes
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut res: Vec<u8> = Vec::with_capacity(168 + self.commitments.len() * 32); // 4 + 32 + 4 + len * 32 + 64 + 64
+        let mut res: Vec<u8> = Vec::with_capacity(168 + self.commitments.points.len() * 32); // 4 + 32 + 4 + len * 32 + 64 + 64
         res.extend_from_slice(&mut self.index.to_le_bytes());
         res.extend_from_slice(&mut self.dh_public_key.to_bytes());
-        let mut tmp = self
-            .commitments
-            .iter()
-            .map(|e| e.compress().to_bytes())
-            .collect::<Vec<[u8; 32]>>();
-        res.extend_from_slice(&mut TryInto::<u32>::try_into(tmp.len()).unwrap().to_le_bytes());
-        for elem in tmp.iter_mut() {
-            res.extend_from_slice(elem);
-        }
+        res.extend_from_slice(&mut self.commitments.to_bytes());
         res.extend_from_slice(&mut self.proof_of_secret_key.to_bytes());
         res.extend_from_slice(&mut self.proof_of_dh_private_key.to_bytes());
 
@@ -558,24 +550,9 @@ impl Participant {
         array.copy_from_slice(&bytes[4..36]);
 
         let dh_public_key = DHPublicKey::from_bytes(&array)?;
-        let commit_len = u32::from_le_bytes(
-            bytes[36..40]
-                .try_into()
-                .map_err(|_| Error::SerialisationError)?,
-        );
-        let mut commitments: Vec<RistrettoPoint> = 
-            Vec::with_capacity(commit_len as usize);
-
-        let mut index_slice = 40 as usize;
-        for _ in 0..commit_len {
-            array.copy_from_slice(&bytes[index_slice..index_slice + 32]);
-            commitments.push(
-                CompressedRistretto(array)
-                    .decompress()
-                    .ok_or(Error::SerialisationError)?,
-            );
-            index_slice += 32;
-        }
+        let mut index_slice = 36 as usize;
+        let commitments = VerifiableSecretSharingCommitment::from_bytes(&bytes[index_slice..])?;
+        index_slice += 8 + commitments.points.len() * 32;
 
         let proof_of_secret_key =
             NizkOfSecretKey::from_bytes(&bytes[index_slice..index_slice + 64])?;
@@ -944,7 +921,7 @@ impl DistributedKeyGeneration<RoundOne> {
         //
         //         s_l ?= H(l, \Phi, \phi_{l0}, g^{r_l} \mdot \phi_{l0}^{-s_i})
         for p in other_participants.iter() {
-            let public_key = match p.commitments.get(0) {
+            let public_key = match p.commitments.points.get(0) {
                 Some(key) => key,
                 None      => {
                     misbehaving_participants.push(p.index);
@@ -953,12 +930,7 @@ impl DistributedKeyGeneration<RoundOne> {
             };
             match p.proof_of_secret_key.verify(&p.index, &public_key, &context_string) {
                 Ok(_)  => {
-                            their_commitments.push(
-                                VerifiableSecretSharingCommitment {
-                                    index: p.index,
-                                    points: p.commitments.clone()
-                                }
-                            );
+                            their_commitments.push(p.commitments.clone());
                             their_dh_public_keys.push((p.index, p.dh_public_key.clone()));
 
                             match p.proof_of_dh_private_key.verify(&p.index, &p.dh_public_key, &context_string) {
@@ -1693,7 +1665,7 @@ mod test {
     fn nizk_of_secret_key() {
         let params = Parameters { n: 3, t: 2 };
         let (p, _, _) = Participant::new(&params, 0, "Φ");
-        let result = p.proof_of_secret_key.verify(&p.index, &p.commitments[0], "Φ");
+        let result = p.proof_of_secret_key.verify(&p.index, &p.commitments.points[0], "Φ");
 
         assert!(result.is_ok());
     }
@@ -1748,7 +1720,7 @@ mod test {
 
         let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, 1, "Φ");
 
-        p1.proof_of_secret_key.verify(&p1.index, &p1.commitments[0], "Φ").unwrap();
+        p1.proof_of_secret_key.verify(&p1.index, &p1.commitments.points[0], "Φ").unwrap();
 
         let mut p1_other_participants: Vec<Participant> = Vec::new();
         let p1_state = DistributedKeyGeneration::<RoundOne>::new(&params,
