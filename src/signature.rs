@@ -699,7 +699,7 @@ mod test {
 
         let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, 1, "Φ");
 
-        p1.proof_of_secret_key.verify(&p1.index, &p1.commitments.points[0], "Φ").unwrap();
+        p1.proof_of_secret_key.verify(&p1.index, &p1.public_key().unwrap(), "Φ").unwrap();
 
         let mut p1_other_participants: Vec<Participant> = Vec::new();
         let p1_state = DistributedKeyGeneration::<RoundOne>::new(&params,
@@ -971,8 +971,8 @@ mod test {
             let (p2, p2coeffs, p2_dh_sk) = Participant::new(&params, 2, "Φ");
             let (p3, p3coeffs, p3_dh_sk) = Participant::new(&params, 3, "Φ");
 
-            p2.proof_of_secret_key.verify(&p2.index, &p2.commitments.points[0], "Φ")?;
-            p3.proof_of_secret_key.verify(&p3.index, &p3.commitments.points[0], "Φ")?;
+            p2.proof_of_secret_key.verify(&p2.index, &p2.public_key().unwrap(), "Φ")?;
+            p3.proof_of_secret_key.verify(&p3.index, &p3.public_key().unwrap(), "Φ")?;
 
             let mut p1_other_participants: Vec<Participant> = vec!(p2.clone(), p3.clone());
             let p1_state = DistributedKeyGeneration::<RoundOne>::new(&params,
@@ -1104,8 +1104,8 @@ mod test {
             let (p2, p2coeffs, p2_dh_sk) = Participant::new(&params, 2, "Φ");
             let (p3, p3coeffs, p3_dh_sk) = Participant::new(&params, 3, "Φ");
 
-            p2.proof_of_secret_key.verify(&p2.index, &p2.commitments.points[0], "Φ")?;
-            p3.proof_of_secret_key.verify(&p3.index, &p3.commitments.points[0], "Φ")?;
+            p2.proof_of_secret_key.verify(&p2.index, &p2.public_key().unwrap(), "Φ")?;
+            p3.proof_of_secret_key.verify(&p3.index, &p3.public_key().unwrap(), "Φ")?;
 
             let mut p1_other_participants: Vec<Participant> = vec!(p2.clone(), p3.clone());
             let p1_state = DistributedKeyGeneration::<RoundOne>::new(&params,

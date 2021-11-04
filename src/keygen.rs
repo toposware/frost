@@ -323,6 +323,14 @@ pub struct VerifiableSecretSharingCommitment {
 }
 
 impl VerifiableSecretSharingCommitment {
+    /// Retrieve \\( \alpha_{i0} * B \\), where \\( B \\) is the Ristretto basepoint.
+    pub fn public_key(&self) -> Option<&RistrettoPoint> {
+        if !self.points.is_empty() {
+            return Some(&self.points[0]);
+        }
+        None
+    }
+
     /// Serialise this commitment to the secret polynomial coefficients as a Vec of bytes
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut res: Vec<u8> = Vec::with_capacity(self.points.len() * 32 + 8);
@@ -520,10 +528,7 @@ impl Participant {
     ///
     /// This is used to pass into the final call to `DistributedKeyGeneration::<RoundTwo>.finish()`.
     pub fn public_key(&self) -> Option<&RistrettoPoint> {
-        if !self.commitments.points.is_empty() {
-            return Some(&self.commitments.points[0]);
-        }
-        None
+        self.commitments.public_key()
     }
 
     /// Serialise this participant to a Vec of bytes
@@ -921,7 +926,7 @@ impl DistributedKeyGeneration<RoundOne> {
         //
         //         s_l ?= H(l, \Phi, \phi_{l0}, g^{r_l} \mdot \phi_{l0}^{-s_i})
         for p in other_participants.iter() {
-            let public_key = match p.commitments.points.get(0) {
+            let public_key = match p.public_key() {
                 Some(key) => key,
                 None      => {
                     misbehaving_participants.push(p.index);
@@ -1415,7 +1420,7 @@ impl DistributedKeyGeneration<RoundTwo> {
         let mut keys: Vec<RistrettoPoint> = Vec::with_capacity(self.state.parameters.n as usize);
 
         for commitment in self.state.their_commitments.iter() {
-            match commitment.points.get(0) {
+            match commitment.public_key() {
                 Some(key) => keys.push(*key),
                 None => return Err(Error::InvalidGroupKey),
             }
@@ -1665,7 +1670,7 @@ mod test {
     fn nizk_of_secret_key() {
         let params = Parameters { n: 3, t: 2 };
         let (p, _, _) = Participant::new(&params, 0, "Φ");
-        let result = p.proof_of_secret_key.verify(&p.index, &p.commitments.points[0], "Φ");
+        let result = p.proof_of_secret_key.verify(&p.index, &p.public_key().unwrap(), "Φ");
 
         assert!(result.is_ok());
     }
@@ -1720,7 +1725,7 @@ mod test {
 
         let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, 1, "Φ");
 
-        p1.proof_of_secret_key.verify(&p1.index, &p1.commitments.points[0], "Φ").unwrap();
+        p1.proof_of_secret_key.verify(&p1.index, &p1.public_key().unwrap(), "Φ").unwrap();
 
         let mut p1_other_participants: Vec<Participant> = Vec::new();
         let p1_state = DistributedKeyGeneration::<RoundOne>::new(&params,
