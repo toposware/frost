@@ -1450,7 +1450,8 @@ impl DistributedKeyGeneration<RoundTwo> {
             index_vector.push(share.sender_index);
         }
 
-        index_vector.push(self.state.my_secret_share.sender_index);
+        // This time you don't use your own index!
+        // index_vector.push(self.state.my_secret_share.sender_index);
 
         let mut key = Scalar::zero();
 
@@ -1462,12 +1463,13 @@ impl DistributedKeyGeneration<RoundTwo> {
             key += share.polynomial_evaluation * coeff;
         }
 
-        let my_coeff = match calculate_lagrange_coefficients(&self.state.my_secret_share.sender_index, &index_vector) {
+        // You don't use your secret share in the computation.
+        /* let my_coeff = match calculate_lagrange_coefficients(&self.state.my_secret_share.sender_index, &index_vector) {
                 Ok(s) => s,
                 Err(error) => return Err(Error::Custom(error.to_string())),
             };
 
-        key += self.state.my_secret_share.polynomial_evaluation * my_coeff;
+        key += self.state.my_secret_share.polynomial_evaluation * my_coeff; */
 
         Ok(SecretKey { index: self.state.my_secret_share.sender_index, key })
     }
@@ -1488,16 +1490,12 @@ impl DistributedKeyGeneration<RoundTwo> {
             index_vector.push(commitment.index);
         }
 
-        index_vector.push(self.state.my_secret_share.sender_index);
+        // This time you don't use your own index!
+        // index_vector.push(self.state.my_secret_share.sender_index);
 
 
-        let mut all_commitments = self.state.their_commitments.clone();
-        all_commitments.push(
-            VerifiableSecretSharingCommitment {
-                index: self.state.my_secret_share.sender_index,
-                points: my_commitment
-            }
-        );
+        let all_commitments = self.state.their_commitments.clone();
+        // all_commitments.push((self.state.my_secret_share.sender_index, VerifiableSecretSharingCommitment(my_commitment)));
 
         let mut group_key = RistrettoPoint::identity();
 
@@ -2082,6 +2080,124 @@ mod test {
 
             assert!(p1_group_key.0.compress() == p2_group_key.0.compress());
             assert!(p2_group_key.0.compress() == p3_group_key.0.compress());
+
+            Ok(())
+        }
+        assert!(do_test().is_ok());
+    }
+
+    #[test]
+    fn keygen_static_2_out_of_3() {
+        fn do_test() -> Result<(), ()> {
+            let params = Parameters { n: 4, t: 2 };
+
+            let (dealer1, dealer1coeffs, dealer1_dh_sk) = Participant::new(&params, 1, "Φ");
+            let (dealer2, dealer2coeffs, dealer2_dh_sk) = Participant::new(&params, 2, "Φ");
+            let (dealer3, dealer3coeffs, dealer3_dh_sk) = Participant::new(&params, 3, "Φ");
+
+            dealer1.proof_of_secret_key.verify(&dealer1.index, &dealer1.public_key().unwrap(), "Φ").or(Err(()))?;
+            dealer2.proof_of_secret_key.verify(&dealer2.index, &dealer2.public_key().unwrap(), "Φ").or(Err(()))?;
+            dealer3.proof_of_secret_key.verify(&dealer3.index, &dealer3.public_key().unwrap(), "Φ").or(Err(()))?; 
+
+            let (signer1, signer1coeffs, signer1_dh_sk) = Participant::new(&params, 1, "Φ");
+            let (signer2, signer2coeffs, signer2_dh_sk) = Participant::new(&params, 2, "Φ");
+            let (signer3, signer3coeffs, signer3_dh_sk) = Participant::new(&params, 3, "Φ");
+
+            signer1.proof_of_secret_key.verify(&signer1.index, &signer1.public_key().unwrap(), "Φ").or(Err(()))?;
+            signer2.proof_of_secret_key.verify(&signer2.index, &signer2.public_key().unwrap(), "Φ").or(Err(()))?;
+            signer3.proof_of_secret_key.verify(&signer3.index, &signer3.public_key().unwrap(), "Φ").or(Err(()))?; 
+
+            let mut dealer1_signers: Vec<Participant> = vec!(signer1.clone(), signer2.clone(), signer3.clone());
+            let dealer1_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+                                                                     &dealer1_dh_sk,
+                                                                     &dealer1.index,
+                                                                     &dealer1coeffs,
+                                                                     &mut dealer1_signers,
+                                                                     "Φ").or(Err(()))?;
+            let dealer1_their_encrypted_secret_shares = dealer1_state.their_encrypted_secret_shares()?;
+
+            let mut dealer2_signers: Vec<Participant> = vec!(signer1.clone(), signer2.clone(), signer3.clone());
+            let dealer2_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+                                                                     &dealer2_dh_sk,
+                                                                     &dealer2.index,
+                                                                     &dealer2coeffs,
+                                                                     &mut dealer2_signers,
+                                                                     "Φ").or(Err(()))?;
+            let dealer2_their_encrypted_secret_shares = dealer2_state.their_encrypted_secret_shares()?;
+
+            let mut dealer3_signers: Vec<Participant> = vec!(signer1.clone(), signer2.clone(), signer3.clone());
+            let dealer3_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+                                                                     &dealer3_dh_sk,
+                                                                     &dealer3.index,
+                                                                     &dealer3coeffs,
+                                                                     &mut dealer3_signers,
+                                                                     "Φ").or(Err(()))?;
+            let dealer3_their_encrypted_secret_shares = dealer3_state.their_encrypted_secret_shares()?;
+
+            let mut signer1_dealers: Vec<Participant> = vec!(dealer1.clone(), dealer2.clone(), dealer3.clone());
+            let signer1_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+                                                                     &signer1_dh_sk,
+                                                                     &signer1.index,
+                                                                     &signer1coeffs,
+                                                                     &mut signer1_dealers,
+                                                                     "Φ").or(Err(()))?;
+
+            let mut signer2_dealers: Vec<Participant> = vec!(dealer1.clone(), dealer2.clone(), dealer3.clone());
+            let signer2_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+                                                                     &signer2_dh_sk,
+                                                                     &signer2.index,
+                                                                     &signer2coeffs,
+                                                                     &mut signer2_dealers,
+                                                                     "Φ").or(Err(()))?;
+
+            let mut signer3_dealers: Vec<Participant> = vec!(dealer1.clone(), dealer2.clone(), dealer3.clone());
+            let signer3_state = DistributedKeyGeneration::<RoundOne>::new(&params,
+                                                                     &signer3_dh_sk,
+                                                                     &signer3.index,
+                                                                     &signer3coeffs,
+                                                                     &mut signer3_dealers,
+                                                                     "Φ").or(Err(()))?;
+
+            let signer1_my_encrypted_secret_shares = vec!(dealer1_their_encrypted_secret_shares[0].clone(),
+                                                          dealer2_their_encrypted_secret_shares[0].clone(),
+                                                          dealer3_their_encrypted_secret_shares[0].clone());
+            let signer2_my_encrypted_secret_shares = vec!(dealer1_their_encrypted_secret_shares[1].clone(),
+                                                          dealer2_their_encrypted_secret_shares[1].clone(),
+                                                          dealer3_their_encrypted_secret_shares[1].clone());
+            let signer3_my_encrypted_secret_shares = vec!(dealer1_their_encrypted_secret_shares[2].clone(),
+                                                          dealer2_their_encrypted_secret_shares[2].clone(),
+                                                          dealer3_their_encrypted_secret_shares[2].clone());
+
+            let signer1_state = signer1_state.to_round_two(signer1_my_encrypted_secret_shares).or(Err(()))?;
+            let signer2_state = signer2_state.to_round_two(signer2_my_encrypted_secret_shares).or(Err(()))?;
+            let signer3_state = signer3_state.to_round_two(signer3_my_encrypted_secret_shares).or(Err(()))?;
+
+            let (signer1_group_key, signer1_secret_key) = signer1_state.finish(signer1.clone().commitments.points).or(Err(()))?;
+            let (signer2_group_key, signer2_secret_key) = signer2_state.finish(signer2.clone().commitments.points).or(Err(()))?;
+            let (signer3_group_key, signer3_secret_key) = signer3_state.finish(signer3.clone().commitments.points).or(Err(()))?;
+
+            assert!(signer1_group_key.0.compress() == signer2_group_key.0.compress());
+            assert!(signer2_group_key.0.compress() == signer3_group_key.0.compress());
+
+            let mut group_secret_key = Scalar::zero();
+            let indices = [1, 2, 3];
+
+            group_secret_key += calculate_lagrange_coefficients(&1, &indices).unwrap()*signer1_secret_key.key;
+            group_secret_key += calculate_lagrange_coefficients(&2, &indices).unwrap()*signer2_secret_key.key;
+            group_secret_key += calculate_lagrange_coefficients(&3, &indices).unwrap()*signer3_secret_key.key;
+
+            let group_key = &group_secret_key * &RISTRETTO_BASEPOINT_TABLE;
+
+            assert!(signer3_group_key.0.compress() == group_key.compress());
+
+            let mut dealer_group_key = RistrettoPoint::identity();
+            let indices = [1, 2, 3];
+
+            dealer_group_key += calculate_lagrange_coefficients(&1, &indices).unwrap()*dealer1.public_key().unwrap();
+            dealer_group_key += calculate_lagrange_coefficients(&2, &indices).unwrap()*dealer2.public_key().unwrap();
+            dealer_group_key += calculate_lagrange_coefficients(&3, &indices).unwrap()*dealer3.public_key().unwrap();
+
+            assert!(dealer_group_key.compress() == group_key.compress());
 
             Ok(())
         }
