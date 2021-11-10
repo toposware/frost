@@ -1044,10 +1044,15 @@ impl DistributedKeyGeneration<RoundOne> {
                                 let mut rng: OsRng = OsRng;
                                 let r = Scalar::random(&mut rng);
 
+                                let a1 = &RISTRETTO_BASEPOINT_TABLE * &r;
+                                let a2 = *pk.1 * r;
+
                                 let mut h = Sha512::new();
                                 h.update(self.state.dh_public_key.compress().to_bytes());
                                 h.update(pk.1.compress().to_bytes());
                                 h.update(dh_key);
+                                h.update(a1.compress().to_bytes());
+                                h.update(a2.compress().to_bytes());
 
                                 let h = Scalar::from_hash(h);
 
@@ -1057,8 +1062,8 @@ impl DistributedKeyGeneration<RoundOne> {
                                         accused_index: pk.0,
                                         dh_key,
                                         proof: ComplaintProof {
-                                            a1: &RISTRETTO_BASEPOINT_TABLE * &r,
-                                            a2: *pk.1 * r,
+                                            a1,
+                                            a2,
                                             z: r + h * self.state.dh_private_key.0,
                                         }
                                     }
@@ -1318,6 +1323,8 @@ impl Complaint {
         h.update(pk_i.compress().to_bytes());
         h.update(pk_l.compress().to_bytes());
         h.update(self.dh_key);
+        h.update(self.proof.a1.compress().to_bytes());
+        h.update(self.proof.a2.compress().to_bytes());
 
         let h = Scalar::from_hash(h);
 
