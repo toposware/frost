@@ -471,23 +471,27 @@ pub struct Participant {
     pub dh_public_key: DHPublicKey,
     /// A vector of Pedersen commitments to the coefficients of this
     /// participant's private polynomial.
-    pub commitments: VerifiableSecretSharingCommitment,
+    pub commitments: Option<VerifiableSecretSharingCommitment>,
     /// The zero-knowledge proof of knowledge of the secret key (a.k.a. the
     /// first coefficient in the private polynomial).  It is constructed as a
     /// Schnorr signature using \\( a_{i0} \\) as the signing key.
-    pub proof_of_secret_key: NizkOfSecretKey,
+    pub proof_of_secret_key: Option<NizkOfSecretKey>,
     /// The zero-knowledge proof of knowledge of the DH private key.
     /// It is computed similarly to the proof_of_secret_key.
     pub proof_of_dh_private_key: NizkOfSecretKey,
 }
 
 impl Participant {
-    /// Construct a new participant for the distributed key generation protocol.
+    /// Construct a new dealer for the distributed key generation protocol.
+    /// A dealer generates shares for the signers. In case of resharing/refreshing,
+    /// the constant coefficient is passed as input.
     ///
     /// # Inputs
     ///
-    /// * The protocol instance [`Parameters`], and
-    /// * This participant's `index`.
+    /// * The protocol instance [`Parameters`]
+    /// * This dealer's `index`,
+    /// * This dealer's previous `secret_key` (optional), and
+    /// * A context string to prevent replay attacks.
     ///
     /// # Usage
     ///
@@ -498,9 +502,9 @@ impl Participant {
     /// # Returns
     ///
     /// A distributed key generation protocol [`Participant`] and that
-    /// participant's secret polynomial `Coefficients` which must be kept
-    /// private, along the participant Diffie-Hellman secret key for secret shares encryption.
-    pub fn new(parameters: &Parameters, index: u32, context_string: &str) -> (Self, Coefficients, DHPrivateKey) {
+    /// dealer's secret polynomial `Coefficients` which must be kept
+    /// private, along the dealer's Diffie-Hellman secret key for secret shares encryption.
+    pub fn new_dealer(parameters: &Parameters, index: u32, secret_key: Option<Scalar>, context_string: &str) -> (Self, Coefficients, DHPrivateKey) {
         // Step 1: Every participant P_i samples t random values (a_{i0}, ..., a_{i(t-1)})
         //         uniformly in ZZ_q, and uses these values as coefficients to define a
         //         polynomial f_i(x) = \sum_{j=0}^{t-1} a_{ij} x^{j} of degree t-1 over
@@ -542,16 +546,66 @@ impl Participant {
         let proof_of_secret_key: NizkOfSecretKey = NizkOfSecretKey::prove(&index, &coefficients.0[0], &commitments.points[0], &context_string, rng);
 
         // Step 4: Every participant P_i broadcasts C_i, \alpha_i to all other participants.
-        (Participant { index, dh_public_key, commitments, proof_of_secret_key, proof_of_dh_private_key }, coefficients, dh_private_key)
+        (Participant { index, dh_public_key, commitments: Some(commitments), proof_of_secret_key: Some(proof_of_secret_key), proof_of_dh_private_key }, coefficients, dh_private_key)
+    }
+
+
+    /// Construct a new signer for the distributed key generation protocol.
+    /// A signer combines shares from the dealers and computes a private
+    /// signing key.
+    ///
+    /// # Inputs
+    ///
+    /// * The protocol instance [`Parameters`]
+    /// * This signer's `index`, and
+    /// * A context string to prevent replay attacks.
+    ///
+    /// # Usage
+    ///
+    /// After a new signer is constructed, the `participant.index` and
+    /// `participant.proof_of_secret_key` should be sent to every
+    /// other participant in the protocol. A signer has no secret
+    /// coefficients, and thus no commitment to share.
+    ///
+    /// # Returns
+    ///
+    /// A distributed key generation protocol [`Participant`] and that
+    /// signer's Diffie-Hellman secret key for secret shares encryption.
+    pub fn new_signer(parameters: &Parameters, index: u32, context_string: &str) -> (Self, DHPrivateKey) {
+        let t: usize = parameters.t as usize;
+        let mut rng: OsRng = OsRng;
+
+        // RICE-FROST: Every participant samples a random pair of keys (dh_private_key, dh_public_key)
+        // and generates a proof of knowledge of dh_private_key. This will be used for secret shares
+        // encryption and for complaint generation.
+
+        let dh_private_key = DHPrivateKey(Scalar::random(&mut rng));
+        let dh_public_key = DHPublicKey(&RISTRETTO_BASEPOINT_TABLE * &dh_private_key);
+
+        // Compute a proof of knowledge of dh_secret_key
+        let proof_of_dh_private_key: NizkOfSecretKey = NizkOfSecretKey::prove(&index, &dh_private_key, &dh_public_key, &context_string, rng);
+
+        // Every signer P_j broadcasts C_j, \alpha_j to all other participants.
+        (Participant { index, dh_public_key, commitments: None, proof_of_secret_key: None, proof_of_dh_private_key }, dh_private_key)
     }
 
     /// Retrieve \\( \alpha_{i0} * B \\), where \\( B \\) is the Ristretto basepoint.
     ///
     /// This is used to pass into the final call to `DistributedKeyGeneration::<RoundTwo>.finish()`.
     pub fn public_key(&self) -> Option<&RistrettoPoint> {
-        self.commitments.public_key()
+        if self.commitments.is_some() {
+            return self.commitments.as_ref().unwrap().public_key();
+        }
+
+        None
     }
 
+    /// PLACEHOLDER, MUST BE CHANGED
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut res: Vec<u8> = Vec::with_capacity(168);
+        res
+    }
+    /*
     /// Serialise this participant to a Vec of bytes
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut res: Vec<u8> = Vec::with_capacity(168 + self.commitments.points.len() * 32); // 4 + 32 + 4 + len * 32 + 64 + 64
@@ -563,6 +617,7 @@ impl Participant {
 
         res
     }
+    */
 
     /// Deserialise this slice of bytes to a `Participant`
     pub fn from_bytes(bytes: &[u8]) -> Result<Participant, Error> {
@@ -588,8 +643,8 @@ impl Participant {
         Ok(Participant {
             index,
             dh_public_key,
-            commitments,
-            proof_of_secret_key,
+            commitments: Some(commitments),
+            proof_of_secret_key: Some(proof_of_secret_key),
             proof_of_dh_private_key,
         })
     }
@@ -955,9 +1010,9 @@ impl DistributedKeyGeneration<RoundOne> {
                     continue;
                 }
             };
-            match p.proof_of_secret_key.verify(&p.index, &public_key, &context_string) {
+            match p.proof_of_secret_key.as_ref().unwrap().verify(&p.index, &public_key, &context_string) {
                 Ok(_)  => {
-                            their_commitments.push(p.commitments.clone());
+                            their_commitments.push(p.commitments.as_ref().unwrap().clone());
                             their_dh_public_keys.push((p.index, p.dh_public_key.clone()));
 
                             match p.proof_of_dh_private_key.verify(&p.index, &p.dh_public_key, &context_string) {
