@@ -110,11 +110,11 @@ fn signing_and_verification_3_out_of_5() {
     let p4_state = p4_state.to_round_two(p4_my_encrypted_secret_shares).unwrap();
     let p5_state = p5_state.to_round_two(p5_my_encrypted_secret_shares).unwrap();
 
-    let (group_key, p1_sk) = p1_state.finish(p1.commitments.unwrap().points).unwrap();
-    let (_, _) = p2_state.finish(p2.commitments.unwrap().points).unwrap();
-    let (_, p3_sk) = p3_state.finish(p3.commitments.unwrap().points).unwrap();
-    let (_, p4_sk) = p4_state.finish(p4.commitments.unwrap().points).unwrap();
-    let (_, _) = p5_state.finish(p5.commitments.unwrap().points).unwrap();
+    let (group_key, p1_sk) = p1_state.finish().unwrap();
+    let (_, _) = p2_state.finish().unwrap();
+    let (_, p3_sk) = p3_state.finish().unwrap();
+    let (_, p4_sk) = p4_state.finish().unwrap();
+    let (_, _) = p5_state.finish().unwrap();
 
     let context = b"CONTEXT STRING STOLEN FROM DALEK TEST SUITE";
     let message = b"This is a test of the tsunami alert system. This is only a test.";
@@ -195,9 +195,9 @@ fn signing_and_verification_with_ed25519_dalek_2_out_of_3() {
     let p2_state = p2_state.to_round_two(p2_my_encrypted_secret_shares).unwrap();
     let p3_state = p3_state.to_round_two(p3_my_encrypted_secret_shares).unwrap();
 
-    let (group_key, p1_sk) = p1_state.finish(p1.commitments.unwrap().points).unwrap();
-    let (_, p2_sk) = p2_state.finish(p2.commitments.unwrap().points).unwrap();
-    let (_, p3_sk) = p3_state.finish(p3.commitments.unwrap().points).unwrap();
+    let (group_key, p1_sk) = p1_state.finish().unwrap();
+    let (_, p2_sk) = p2_state.finish().unwrap();
+    let (_, p3_sk) = p3_state.finish().unwrap();
 
     let context = b"CONTEXT STRING STOLEN FROM DALEK TEST SUITE";
     let message = b"This is a test of the tsunami alert system. This is only a test.";
