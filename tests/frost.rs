@@ -28,14 +28,14 @@ use ice_frost::SignatureAggregator;
 fn signing_and_verification_3_out_of_5() {
     let params = Parameters { n: 5, t: 3 };
 
-    let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, 1, "Φ");
-    let (p2, p2coeffs, p2_dh_sk) = Participant::new(&params, 2, "Φ");
-    let (p3, p3coeffs, p3_dh_sk) = Participant::new(&params, 3, "Φ");
-    let (p4, p4coeffs, p4_dh_sk) = Participant::new(&params, 4, "Φ");
-    let (p5, p5coeffs, p5_dh_sk) = Participant::new(&params, 5, "Φ");
+    let (p1, p1coeffs, p1_dh_sk) = Participant::new_dealer(&params, 1, None, "Φ");
+    let (p2, p2coeffs, p2_dh_sk) = Participant::new_dealer(&params, 2, None, "Φ");
+    let (p3, p3coeffs, p3_dh_sk) = Participant::new_dealer(&params, 3, None, "Φ");
+    let (p4, p4coeffs, p4_dh_sk) = Participant::new_dealer(&params, 4, None, "Φ");
+    let (p5, p5coeffs, p5_dh_sk) = Participant::new_dealer(&params, 5, None, "Φ");
 
     let mut p1_other_participants: Vec<Participant> = vec!(p2.clone(), p3.clone(), p4.clone(), p5.clone());
-    let p1_state = DistributedKeyGeneration::<_>::new(&params,
+    let p1_state = DistributedKeyGeneration::<_>::new_dealer_state(&params,
                                                       &p1_dh_sk,
                                                       &p1.index,
                                                       &p1coeffs,
@@ -44,7 +44,7 @@ fn signing_and_verification_3_out_of_5() {
     let p1_their_encrypted_secret_shares = p1_state.their_encrypted_secret_shares().unwrap();
 
     let mut p2_other_participants: Vec<Participant> = vec!(p1.clone(), p3.clone(), p4.clone(), p5.clone());
-    let p2_state = DistributedKeyGeneration::<>::new(&params,
+    let p2_state = DistributedKeyGeneration::<>::new_dealer_state(&params,
                                                      &p2_dh_sk,
                                                      &p2.index,
                                                      &p2coeffs,
@@ -53,7 +53,7 @@ fn signing_and_verification_3_out_of_5() {
     let p2_their_encrypted_secret_shares = p2_state.their_encrypted_secret_shares().unwrap();
 
     let mut p3_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p4.clone(), p5.clone());
-    let p3_state = DistributedKeyGeneration::<_>::new(&params,
+    let p3_state = DistributedKeyGeneration::<_>::new_dealer_state(&params,
                                                       &p3_dh_sk,
                                                       &p3.index,
                                                       &p3coeffs,
@@ -62,7 +62,7 @@ fn signing_and_verification_3_out_of_5() {
     let p3_their_encrypted_secret_shares = p3_state.their_encrypted_secret_shares().unwrap();
 
     let mut p4_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p3.clone(), p5.clone());
-    let p4_state = DistributedKeyGeneration::<_>::new(&params,
+    let p4_state = DistributedKeyGeneration::<_>::new_dealer_state(&params,
                                                       &p4_dh_sk,
                                                       &p4.index,
                                                       &p4coeffs,
@@ -71,7 +71,7 @@ fn signing_and_verification_3_out_of_5() {
     let p4_their_encrypted_secret_shares = p4_state.their_encrypted_secret_shares().unwrap();
 
     let mut p5_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p3.clone(), p4.clone());
-    let p5_state = DistributedKeyGeneration::<_>::new(&params,
+    let p5_state = DistributedKeyGeneration::<_>::new_dealer_state(&params,
                                                       &p5_dh_sk,
                                                       &p5.index,
                                                       &p5coeffs,
@@ -110,11 +110,11 @@ fn signing_and_verification_3_out_of_5() {
     let p4_state = p4_state.to_round_two(p4_my_encrypted_secret_shares).unwrap();
     let p5_state = p5_state.to_round_two(p5_my_encrypted_secret_shares).unwrap();
 
-    let (group_key, p1_sk) = p1_state.finish(p1.commitments.points).unwrap();
-    let (_, _) = p2_state.finish(p2.commitments.points).unwrap();
-    let (_, p3_sk) = p3_state.finish(p3.commitments.points).unwrap();
-    let (_, p4_sk) = p4_state.finish(p4.commitments.points).unwrap();
-    let (_, _) = p5_state.finish(p5.commitments.points).unwrap();
+    let (group_key, p1_sk) = p1_state.finish(p1.commitments.unwrap().points).unwrap();
+    let (_, _) = p2_state.finish(p2.commitments.unwrap().points).unwrap();
+    let (_, p3_sk) = p3_state.finish(p3.commitments.unwrap().points).unwrap();
+    let (_, p4_sk) = p4_state.finish(p4.commitments.unwrap().points).unwrap();
+    let (_, _) = p5_state.finish(p5.commitments.unwrap().points).unwrap();
 
     let context = b"CONTEXT STRING STOLEN FROM DALEK TEST SUITE";
     let message = b"This is a test of the tsunami alert system. This is only a test.";
@@ -151,12 +151,12 @@ fn signing_and_verification_3_out_of_5() {
 fn signing_and_verification_with_ed25519_dalek_2_out_of_3() {
     let params = Parameters { n: 3, t: 2 };
 
-    let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, 1, "Φ");
-    let (p2, p2coeffs, p2_dh_sk) = Participant::new(&params, 2, "Φ");
-    let (p3, p3coeffs, p3_dh_sk) = Participant::new(&params, 3, "Φ");
+    let (p1, p1coeffs, p1_dh_sk) = Participant::new_dealer(&params, 1, None, "Φ");
+    let (p2, p2coeffs, p2_dh_sk) = Participant::new_dealer(&params, 2, None, "Φ");
+    let (p3, p3coeffs, p3_dh_sk) = Participant::new_dealer(&params, 3, None, "Φ");
 
     let mut p1_other_participants: Vec<Participant> = vec!(p2.clone(), p3.clone());
-    let p1_state = DistributedKeyGeneration::<_>::new(&params,
+    let p1_state = DistributedKeyGeneration::<_>::new_dealer_state(&params,
                                                       &p1_dh_sk,
                                                       &p1.index,
                                                       &p1coeffs,
@@ -165,7 +165,7 @@ fn signing_and_verification_with_ed25519_dalek_2_out_of_3() {
     let p1_their_encrypted_secret_shares = p1_state.their_encrypted_secret_shares().unwrap();
 
     let mut p2_other_participants: Vec<Participant> = vec!(p1.clone(), p3.clone());
-    let p2_state = DistributedKeyGeneration::<>::new(&params,
+    let p2_state = DistributedKeyGeneration::<>::new_dealer_state(&params,
                                                      &p2_dh_sk,
                                                      &p2.index,
                                                      &p2coeffs,
@@ -174,7 +174,7 @@ fn signing_and_verification_with_ed25519_dalek_2_out_of_3() {
     let p2_their_encrypted_secret_shares = p2_state.their_encrypted_secret_shares().unwrap();
 
     let mut p3_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone());
-    let p3_state = DistributedKeyGeneration::<_>::new(&params,
+    let p3_state = DistributedKeyGeneration::<_>::new_dealer_state(&params,
                                                       &p3_dh_sk,
                                                       &p3.index,
                                                       &p3coeffs,
@@ -195,9 +195,9 @@ fn signing_and_verification_with_ed25519_dalek_2_out_of_3() {
     let p2_state = p2_state.to_round_two(p2_my_encrypted_secret_shares).unwrap();
     let p3_state = p3_state.to_round_two(p3_my_encrypted_secret_shares).unwrap();
 
-    let (group_key, p1_sk) = p1_state.finish(p1.commitments.points).unwrap();
-    let (_, p2_sk) = p2_state.finish(p2.commitments.points).unwrap();
-    let (_, p3_sk) = p3_state.finish(p3.commitments.points).unwrap();
+    let (group_key, p1_sk) = p1_state.finish(p1.commitments.unwrap().points).unwrap();
+    let (_, p2_sk) = p2_state.finish(p2.commitments.unwrap().points).unwrap();
+    let (_, p3_sk) = p3_state.finish(p3.commitments.unwrap().points).unwrap();
 
     let context = b"CONTEXT STRING STOLEN FROM DALEK TEST SUITE";
     let message = b"This is a test of the tsunami alert system. This is only a test.";
