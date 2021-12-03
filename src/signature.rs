@@ -705,7 +705,7 @@ mod test {
     fn signing_and_verification_single_party() {
         let params = Parameters { n: 1, t: 1 };
 
-        let (p1, p1coeffs, p1_dh_sk) = Participant::new_dealer(&params, 1, None, "Φ");
+        let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, false, 1, None, "Φ");
 
         p1.proof_of_secret_key.as_ref().unwrap().verify(&p1.index, &p1.public_key().unwrap(), "Φ").unwrap();
 
@@ -713,7 +713,7 @@ mod test {
         let p1_state = DistributedKeyGeneration::<RoundOne>::new_dealer_state(&params,
                                                                  &p1_dh_sk,
                                                                  &p1.index,
-                                                                 &p1coeffs,
+                                                                 &p1coeffs.unwrap(),
                                                                  &mut p1_other_participants,
                                                                  "Φ").unwrap();
         let p1_my_encrypted_secret_shares = Vec::new();
@@ -756,13 +756,13 @@ mod test {
     fn signing_and_verification_1_out_of_1() {
         let params = Parameters { n: 1, t: 1 };
 
-        let (p1, p1coeffs, p1_dh_sk) = Participant::new_dealer(&params, 1, None, "Φ");
+        let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, false, 1, None, "Φ");
 
         let mut p1_other_participants: Vec<Participant> = Vec::with_capacity(0);
         let p1_state = DistributedKeyGeneration::<RoundOne>::new_dealer_state(&params,
                                                                  &p1_dh_sk,
                                                                  &p1.index,
-                                                                 &p1coeffs,
+                                                                 &p1coeffs.unwrap(),
                                                                  &mut p1_other_participants,
                                                                  "Φ").unwrap();
         let p1_my_encrypted_secret_shares = Vec::with_capacity(0);
@@ -796,14 +796,14 @@ mod test {
     fn signing_and_verification_1_out_of_2() {
         let params = Parameters { n: 2, t: 1 };
 
-        let (p1, p1coeffs, p1_dh_sk) = Participant::new_dealer(&params, 1, None, "Φ");
-        let (p2, p2coeffs, p2_dh_sk) = Participant::new_dealer(&params, 2, None, "Φ");
+        let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, false, 1, None, "Φ");
+        let (p2, p2coeffs, p2_dh_sk) = Participant::new(&params, false, 2, None, "Φ");
 
         let mut p1_other_participants: Vec<Participant> = vec!(p2.clone());
         let p1_state = DistributedKeyGeneration::<RoundOne>::new_dealer_state(&params,
                                                                  &p1_dh_sk,
                                                                  &p1.index,
-                                                                 &p1coeffs,
+                                                                 &p1coeffs.unwrap(),
                                                                  &mut p1_other_participants,
                                                                  "Φ").unwrap();
         let p1_their_encrypted_secret_shares = p1_state.their_encrypted_secret_shares().unwrap();
@@ -812,7 +812,7 @@ mod test {
         let p2_state = DistributedKeyGeneration::<RoundOne>::new_dealer_state(&params,
                                                                  &p2_dh_sk,
                                                                  &p2.index,
-                                                                 &p2coeffs,
+                                                                 &p2coeffs.unwrap(),
                                                                  &mut p2_other_participants,
                                                                  "Φ").unwrap();
         let p2_their_encrypted_secret_shares = p2_state.their_encrypted_secret_shares().unwrap();
@@ -852,17 +852,17 @@ mod test {
     fn signing_and_verification_3_out_of_5() {
         let params = Parameters { n: 5, t: 3 };
 
-        let (p1, p1coeffs, p1_dh_sk) = Participant::new_dealer(&params, 1, None, "Φ");
-        let (p2, p2coeffs, p2_dh_sk) = Participant::new_dealer(&params, 2, None, "Φ");
-        let (p3, p3coeffs, p3_dh_sk) = Participant::new_dealer(&params, 3, None, "Φ");
-        let (p4, p4coeffs, p4_dh_sk) = Participant::new_dealer(&params, 4, None, "Φ");
-        let (p5, p5coeffs, p5_dh_sk) = Participant::new_dealer(&params, 5, None, "Φ");
+        let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, false, 1, None, "Φ");
+        let (p2, p2coeffs, p2_dh_sk) = Participant::new(&params, false, 2, None, "Φ");
+        let (p3, p3coeffs, p3_dh_sk) = Participant::new(&params, false, 3, None, "Φ");
+        let (p4, p4coeffs, p4_dh_sk) = Participant::new(&params, false, 4, None, "Φ");
+        let (p5, p5coeffs, p5_dh_sk) = Participant::new(&params, false, 5, None, "Φ");
 
         let mut p1_other_participants: Vec<Participant> = vec!(p2.clone(), p3.clone(), p4.clone(), p5.clone());
         let p1_state = DistributedKeyGeneration::<RoundOne>::new_dealer_state(&params,
                                                                  &p1_dh_sk,
                                                                  &p1.index,
-                                                                 &p1coeffs,
+                                                                 &p1coeffs.unwrap(),
                                                                  &mut p1_other_participants,
                                                                  "Φ").unwrap();
         let p1_their_encrypted_secret_shares = p1_state.their_encrypted_secret_shares().unwrap();
@@ -871,7 +871,7 @@ mod test {
         let p2_state = DistributedKeyGeneration::<RoundOne>::new_dealer_state(&params,
                                                                  &p2_dh_sk,
                                                                  &p2.index,
-                                                                 &p2coeffs,
+                                                                 &p2coeffs.unwrap(),
                                                                  &mut p2_other_participants,
                                                                  "Φ").unwrap();
         let p2_their_encrypted_secret_shares = p2_state.their_encrypted_secret_shares().unwrap();
@@ -880,7 +880,7 @@ mod test {
         let p3_state = DistributedKeyGeneration::<RoundOne>::new_dealer_state(&params,
                                                                  &p3_dh_sk,
                                                                  &p3.index,
-                                                                 &p3coeffs,
+                                                                 &p3coeffs.unwrap(),
                                                                  &mut p3_other_participants,
                                                                  "Φ").unwrap();
         let p3_their_encrypted_secret_shares = p3_state.their_encrypted_secret_shares().unwrap();
@@ -889,7 +889,7 @@ mod test {
         let p4_state = DistributedKeyGeneration::<RoundOne>::new_dealer_state(&params,
                                                                  &p4_dh_sk,
                                                                  &p4.index,
-                                                                 &p4coeffs,
+                                                                 &p4coeffs.unwrap(),
                                                                  &mut p4_other_participants,
                                                                  "Φ").unwrap();
         let p4_their_encrypted_secret_shares = p4_state.their_encrypted_secret_shares().unwrap();
@@ -898,7 +898,7 @@ mod test {
         let p5_state = DistributedKeyGeneration::<RoundOne>::new_dealer_state(&params,
                                                                  &p5_dh_sk,
                                                                  &p5.index,
-                                                                 &p5coeffs,
+                                                                 &p5coeffs.unwrap(),
                                                                  &mut p5_other_participants,
                                                                  "Φ").unwrap();
         let p5_their_encrypted_secret_shares = p5_state.their_encrypted_secret_shares().unwrap();
@@ -975,9 +975,9 @@ mod test {
         fn do_keygen() -> Result<(Parameters, SecretKey, SecretKey, SecretKey, GroupKey), ()> {
             let params = Parameters { n: 3, t: 2 };
 
-            let (p1, p1coeffs, p1_dh_sk) = Participant::new_dealer(&params, 1, None, "Φ");
-            let (p2, p2coeffs, p2_dh_sk) = Participant::new_dealer(&params, 2, None, "Φ");
-            let (p3, p3coeffs, p3_dh_sk) = Participant::new_dealer(&params, 3, None, "Φ");
+            let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, false, 1, None, "Φ");
+            let (p2, p2coeffs, p2_dh_sk) = Participant::new(&params, false, 2, None, "Φ");
+            let (p3, p3coeffs, p3_dh_sk) = Participant::new(&params, false, 3, None, "Φ");
 
             p2.proof_of_secret_key.as_ref().unwrap().verify(&p2.index, &p2.public_key().unwrap(), "Φ")?;
             p3.proof_of_secret_key.as_ref().unwrap().verify(&p3.index, &p3.public_key().unwrap(), "Φ")?;
@@ -986,7 +986,7 @@ mod test {
             let p1_state = DistributedKeyGeneration::<RoundOne>::new_dealer_state(&params,
                                                                      &p1_dh_sk,
                                                                      &p1.index,
-                                                                     &p1coeffs,
+                                                                     &p1coeffs.unwrap(),
                                                                      &mut p1_other_participants,
                                                                      "Φ").or(Err(()))?;
             let p1_their_encrypted_secret_shares = p1_state.their_encrypted_secret_shares()?;
@@ -995,7 +995,7 @@ mod test {
             let p2_state = DistributedKeyGeneration::<RoundOne>::new_dealer_state(&params,
                                                                      &p2_dh_sk,
                                                                      &p2.index,
-                                                                     &p2coeffs,
+                                                                     &p2coeffs.unwrap(),
                                                                      &mut p2_other_participants,
                                                                      "Φ").or(Err(()))?;
             let p2_their_encrypted_secret_shares = p2_state.their_encrypted_secret_shares()?;
@@ -1004,7 +1004,7 @@ mod test {
             let  p3_state = DistributedKeyGeneration::<RoundOne>::new_dealer_state(&params,
                                                                       &p3_dh_sk,
                                                                       &p3.index,
-                                                                      &p3coeffs,
+                                                                      &p3coeffs.unwrap(),
                                                                       &mut p3_other_participants,
                                                                       "Φ").or(Err(()))?;
             let p3_their_encrypted_secret_shares = p3_state.their_encrypted_secret_shares()?;
@@ -1108,9 +1108,9 @@ mod test {
         fn do_keygen() -> Result<(Parameters, SecretKey, SecretKey, SecretKey, GroupKey), ()> {
             let params = Parameters { n: 3, t: 2 };
 
-            let (p1, p1coeffs, p1_dh_sk) = Participant::new_dealer(&params, 1, None, "Φ");
-            let (p2, p2coeffs, p2_dh_sk) = Participant::new_dealer(&params, 2, None, "Φ");
-            let (p3, p3coeffs, p3_dh_sk) = Participant::new_dealer(&params, 3, None, "Φ");
+            let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, false, 1, None, "Φ");
+            let (p2, p2coeffs, p2_dh_sk) = Participant::new(&params, false, 2, None, "Φ");
+            let (p3, p3coeffs, p3_dh_sk) = Participant::new(&params, false, 3, None, "Φ");
 
             p2.proof_of_secret_key.as_ref().unwrap().verify(&p2.index, &p2.public_key().unwrap(), "Φ")?;
             p3.proof_of_secret_key.as_ref().unwrap().verify(&p3.index, &p3.public_key().unwrap(), "Φ")?;
@@ -1119,7 +1119,7 @@ mod test {
             let p1_state = DistributedKeyGeneration::<RoundOne>::new_dealer_state(&params,
                                                                      &p1_dh_sk,
                                                                      &p1.index,
-                                                                     &p1coeffs,
+                                                                     &p1coeffs.unwrap(),
                                                                      &mut p1_other_participants,
                                                                      "Φ").or(Err(()))?;
             let p1_their_encrypted_secret_shares = p1_state.their_encrypted_secret_shares()?;
@@ -1128,7 +1128,7 @@ mod test {
             let p2_state = DistributedKeyGeneration::<RoundOne>::new_dealer_state(&params,
                                                                      &p2_dh_sk,
                                                                      &p2.index,
-                                                                     &p2coeffs,
+                                                                     &p2coeffs.unwrap(),
                                                                      &mut p2_other_participants,
                                                                      "Φ").or(Err(()))?;
             let p2_their_encrypted_secret_shares = p2_state.their_encrypted_secret_shares()?;
@@ -1137,7 +1137,7 @@ mod test {
             let  p3_state = DistributedKeyGeneration::<RoundOne>::new_dealer_state(&params,
                                                                       &p3_dh_sk,
                                                                       &p3.index,
-                                                                      &p3coeffs,
+                                                                      &p3coeffs.unwrap(),
                                                                       &mut p3_other_participants,
                                                                       "Φ").or(Err(()))?;
             let p3_their_encrypted_secret_shares = p3_state.their_encrypted_secret_shares()?;
