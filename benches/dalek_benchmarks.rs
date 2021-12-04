@@ -43,22 +43,22 @@ mod dkg_benches {
 
     fn participant_new(c: &mut Criterion) {
         let params = Parameters { n: NUMBER_OF_PARTICIPANTS, t: THRESHOLD_OF_PARTICIPANTS };
-        c.bench_function("Participant creation", move |b| b.iter(|| Participant::new(&params, 1, "Φ")));
+        c.bench_function("Participant creation", move |b| b.iter(|| Participant::new_dealer(&params, 1, "Φ")));
     }
 
     fn round_one_t_out_of_n(c: &mut Criterion) {
         let params = Parameters { n: NUMBER_OF_PARTICIPANTS, t: THRESHOLD_OF_PARTICIPANTS };
 
         let mut participants_except_p1 = Vec::<Participant>::with_capacity((NUMBER_OF_PARTICIPANTS - 1) as usize);
-        let (p1, coefficient, p1_dh_sk) = Participant::new(&params, 1, "Φ");
+        let (p1, coefficient, p1_dh_sk) = Participant::new_dealer(&params, 1, "Φ");
 
         for i in 2..NUMBER_OF_PARTICIPANTS+1 {
-            let (p, _, _) = Participant::new(&params, i, "Φ");
+            let (p, _, _) = Participant::new_dealer(&params, i, "Φ");
             participants_except_p1.push(p);
         }
 
         c.bench_function("Round One", move |b| {
-            b.iter(|| DistributedKeyGeneration::<_>::new(&params,
+            b.iter(|| DistributedKeyGeneration::<_>::new_initial_state(&params,
                                                          &p1_dh_sk,
                                                          &p1.index,
                                                          &coefficient,
@@ -75,7 +75,7 @@ mod dkg_benches {
         let mut dh_secret_keys = Vec::<DHPrivateKey>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
 
         for i in 1..NUMBER_OF_PARTICIPANTS+1 {
-            let (p, c, dh_sk) = Participant::new(&params, i, "Φ");
+            let (p, c, dh_sk) = Participant::new_dealer(&params, i, "Φ");
             participants.push(p);
             coefficients.push(c);
             dh_secret_keys.push(dh_sk);
@@ -85,7 +85,7 @@ mod dkg_benches {
 
         let mut participants_except_p1: Vec::<Participant> = participants.clone();
         participants_except_p1.remove(0);
-        let p1_state = DistributedKeyGeneration::<_>::new(&params,
+        let p1_state = DistributedKeyGeneration::<_>::new_initial_state(&params,
                                                           &dh_secret_keys[0],
                                                           &participants[0].index,
                                                           &coefficients[0],
@@ -95,7 +95,7 @@ mod dkg_benches {
         for i in 2..NUMBER_OF_PARTICIPANTS+1 {
             let mut participants_except_pi: Vec::<Participant> = participants.clone();
             participants_except_pi.remove((i-1) as usize);
-            let pi_state = DistributedKeyGeneration::<_>::new(&params,
+            let pi_state = DistributedKeyGeneration::<_>::new_initial_state(&params,
                                                               &dh_secret_keys[(i-1) as usize],
                                                               &participants[(i-1) as usize].index,
                                                               &coefficients[(i-1) as usize],
@@ -118,7 +118,7 @@ mod dkg_benches {
         let mut dh_secret_keys = Vec::<DHPrivateKey>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
 
         for i in 1..NUMBER_OF_PARTICIPANTS+1 {
-            let (p, c, dh_sk) = Participant::new(&params, i, "Φ");
+            let (p, c, dh_sk) = Participant::new_dealer(&params, i, "Φ");
             participants.push(p);
             coefficients.push(c);
             dh_secret_keys.push(dh_sk);
@@ -128,7 +128,7 @@ mod dkg_benches {
 
         let mut participants_except_p1: Vec::<Participant> = participants.clone();
         participants_except_p1.remove(0);
-        let p1_state = DistributedKeyGeneration::<_>::new(&params,
+        let p1_state = DistributedKeyGeneration::<_>::new_initial_state(&params,
                                                           &dh_secret_keys[0],
                                                           &participants[0].index,
                                                           &coefficients[0],
@@ -138,7 +138,7 @@ mod dkg_benches {
         for i in 2..NUMBER_OF_PARTICIPANTS+1 {
             let mut participants_except_pi: Vec::<Participant> = participants.clone();
             participants_except_pi.remove((i-1) as usize);
-            let pi_state = DistributedKeyGeneration::<_>::new(&params,
+            let pi_state = DistributedKeyGeneration::<_>::new_initial_state(&params,
                                                               &dh_secret_keys[(i-1) as usize],
                                                               &participants[(i-1) as usize].index,
                                                               &coefficients[(i-1) as usize],
@@ -151,9 +151,7 @@ mod dkg_benches {
         let p1_state = p1_state.to_round_two(p1_my_encrypted_secret_shares).unwrap();
 
         c.bench_function("Finish", move |b| {
-            let comm = &participants[0].commitments.points;
-
-            b.iter(|| p1_state.clone().finish(comm.clone()));
+            b.iter(|| p1_state.clone().finish());
         });
     }
 
@@ -179,7 +177,7 @@ mod sign_benches {
         let mut dh_secret_keys = Vec::<DHPrivateKey>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
 
         for i in 1..NUMBER_OF_PARTICIPANTS+1 {
-            let (p, c, dh_sk) = Participant::new(&params, i, "Φ");
+            let (p, c, dh_sk) = Participant::new_dealer(&params, i, "Φ");
             participants.push(p);
             coefficients.push(c);
             dh_secret_keys.push(dh_sk);
@@ -194,7 +192,7 @@ mod sign_benches {
         for i in 1..NUMBER_OF_PARTICIPANTS+1 {
             let mut participants_except_pi: Vec::<Participant> = participants.clone();
             participants_except_pi.remove((i-1) as usize);
-            let pi_state = DistributedKeyGeneration::<_>::new(&params,
+            let pi_state = DistributedKeyGeneration::<_>::new_initial_state(&params,
                                                               &dh_secret_keys[(i-1) as usize],
                                                               &participants[(i-1) as usize].index,
                                                               &coefficients[(i-1) as usize],
@@ -226,15 +224,15 @@ mod sign_benches {
         }
 
         let mut participants_secret_keys = Vec::<IndividualSecretKey>::with_capacity(THRESHOLD_OF_PARTICIPANTS as usize);
-        let (group_key, p1_sk) = participants_states_2[0].clone().finish(participants[1].clone().commitments.points).unwrap();
+        let (group_key, p1_sk) = participants_states_2[0].clone().finish().unwrap();
         participants_secret_keys.push(p1_sk);
 
         for i in 2..THRESHOLD_OF_PARTICIPANTS+1 {
-            let (_, pi_sk) = participants_states_2[(i-1) as usize].clone().finish(participants[(i-1) as usize].clone().commitments.points).unwrap();
+            let (_, pi_sk) = participants_states_2[(i-1) as usize].clone().finish().unwrap();
             participants_secret_keys.push(pi_sk);
         }
         for i in (THRESHOLD_OF_PARTICIPANTS+2)..NUMBER_OF_PARTICIPANTS+1 {
-            let (_, _) = participants_states_2[(i-1) as usize].clone().finish(participants[(i-1) as usize].clone().commitments.points).unwrap();
+            let (_, _) = participants_states_2[(i-1) as usize].clone().finish().unwrap();
         }
 
         let context = b"CONTEXT STRING STOLEN FROM DALEK TEST SUITE";
@@ -271,7 +269,7 @@ mod sign_benches {
         let mut dh_secret_keys = Vec::<DHPrivateKey>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
 
         for i in 1..NUMBER_OF_PARTICIPANTS+1 {
-            let (p, c, dh_sk) = Participant::new(&params, i, "Φ");
+            let (p, c, dh_sk) = Participant::new_dealer(&params, i, "Φ");
             participants.push(p);
             coefficients.push(c);
             dh_secret_keys.push(dh_sk);
@@ -286,7 +284,7 @@ mod sign_benches {
         for i in 1..NUMBER_OF_PARTICIPANTS+1 {
             let mut participants_except_pi: Vec::<Participant> = participants.clone();
             participants_except_pi.remove((i-1) as usize);
-            let pi_state = DistributedKeyGeneration::<_>::new(&params,
+            let pi_state = DistributedKeyGeneration::<_>::new_initial_state(&params,
                                                               &dh_secret_keys[(i-1) as usize],
                                                               &participants[(i-1) as usize].index,
                                                               &coefficients[(i-1) as usize],
@@ -318,15 +316,15 @@ mod sign_benches {
         }
 
         let mut participants_secret_keys = Vec::<IndividualSecretKey>::with_capacity(THRESHOLD_OF_PARTICIPANTS as usize);
-        let (group_key, p1_sk) = participants_states_2[0].clone().finish(participants[1].clone().commitments.points).unwrap();
+        let (group_key, p1_sk) = participants_states_2[0].clone().finish().unwrap();
         participants_secret_keys.push(p1_sk);
 
         for i in 2..THRESHOLD_OF_PARTICIPANTS+1 {
-            let (_, pi_sk) = participants_states_2[(i-1) as usize].clone().finish(participants[(i-1) as usize].clone().commitments.points).unwrap();
+            let (_, pi_sk) = participants_states_2[(i-1) as usize].clone().finish().unwrap();
             participants_secret_keys.push(pi_sk);
         }
         for i in (THRESHOLD_OF_PARTICIPANTS+2)..NUMBER_OF_PARTICIPANTS+1 {
-            let (_, _) = participants_states_2[(i-1) as usize].clone().finish(participants[(i-1) as usize].clone().commitments.points).unwrap();
+            let (_, _) = participants_states_2[(i-1) as usize].clone().finish().unwrap();
         }
 
         let context = b"CONTEXT STRING STOLEN FROM DALEK TEST SUITE";
@@ -373,7 +371,7 @@ mod sign_benches {
         let mut dh_secret_keys = Vec::<DHPrivateKey>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
 
         for i in 1..NUMBER_OF_PARTICIPANTS+1 {
-            let (p, c, dh_sk) = Participant::new(&params, i, "Φ");
+            let (p, c, dh_sk) = Participant::new_dealer(&params, i, "Φ");
             participants.push(p);
             coefficients.push(c);
             dh_secret_keys.push(dh_sk);
@@ -388,7 +386,7 @@ mod sign_benches {
         for i in 1..NUMBER_OF_PARTICIPANTS+1 {
             let mut participants_except_pi: Vec::<Participant> = participants.clone();
             participants_except_pi.remove((i-1) as usize);
-            let pi_state = DistributedKeyGeneration::<_>::new(&params,
+            let pi_state = DistributedKeyGeneration::<_>::new_initial_state(&params,
                                                               &dh_secret_keys[(i-1) as usize],
                                                               &participants[(i-1) as usize].index,
                                                               &coefficients[(i-1) as usize],
@@ -420,15 +418,15 @@ mod sign_benches {
         }
 
         let mut participants_secret_keys = Vec::<IndividualSecretKey>::with_capacity(THRESHOLD_OF_PARTICIPANTS as usize);
-        let (group_key, p1_sk) = participants_states_2[0].clone().finish(participants[1].clone().commitments.points).unwrap();
+        let (group_key, p1_sk) = participants_states_2[0].clone().finish().unwrap();
         participants_secret_keys.push(p1_sk);
 
         for i in 2..THRESHOLD_OF_PARTICIPANTS+1 {
-            let (_, pi_sk) = participants_states_2[(i-1) as usize].clone().finish(participants[(i-1) as usize].clone().commitments.points).unwrap();
+            let (_, pi_sk) = participants_states_2[(i-1) as usize].clone().finish().unwrap();
             participants_secret_keys.push(pi_sk);
         }
         for i in (THRESHOLD_OF_PARTICIPANTS+2)..NUMBER_OF_PARTICIPANTS+1 {
-            let (_, _) = participants_states_2[(i-1) as usize].clone().finish(participants[(i-1) as usize].clone().commitments.points).unwrap();
+            let (_, _) = participants_states_2[(i-1) as usize].clone().finish().unwrap();
         }
 
         let context = b"CONTEXT STRING STOLEN FROM DALEK TEST SUITE";
