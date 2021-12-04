@@ -78,9 +78,9 @@
 //!
 //! // Alice, Bob, and Carol each generate their secret polynomial coefficients
 //! // and commitments to them, as well as a zero-knowledge proof of a secret key.
-//! let (alice, alice_coeffs, alice_dh_sk) = Participant::new(&params, 1, "Φ");
-//! let (bob, bob_coeffs, bob_dh_sk) = Participant::new(&params, 2, "Φ");
-//! let (carol, carol_coeffs, carol_dh_sk) = Participant::new(&params, 3, "Φ");
+//! let (alice, alice_coeffs, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ");
+//! let (bob, bob_coeffs, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ");
+//! let (carol, carol_coeffs, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ");
 //!
 //! // They send these values to each of the other participants (out of scope
 //! // for this library), or otherwise publish them somewhere.
@@ -97,51 +97,57 @@
 //! //
 //! // Bob and Carol verify Alice's zero-knowledge proof by doing:
 //!
-//! alice.proof_of_secret_key.verify(&alice.index, &alice.public_key().unwrap(), "Φ").or(Err(()))?;
+//! alice.proof_of_secret_key.as_ref().unwrap().verify(&alice.index, &alice.public_key().unwrap(), "Φ").or(Err(()))?;
 //!
 //! // Similarly, Alice and Carol verify Bob's proof:
-//! bob.proof_of_secret_key.verify(&bob.index, &bob.public_key().unwrap(), "Φ").or(Err(()))?;
+//! bob.proof_of_secret_key.as_ref().unwrap().verify(&bob.index, &bob.public_key().unwrap(), "Φ").or(Err(()))?;
 //!
 //! // And, again, Alice and Bob verify Carol's proof:
-//! carol.proof_of_secret_key.verify(&carol.index, &carol.public_key().unwrap(), "Φ").or(Err(()))?;
+//! carol.proof_of_secret_key.as_ref().unwrap().verify(&carol.index, &carol.public_key().unwrap(), "Φ").or(Err(()))?;
 //!
 //! // Alice enters round one of the distributed key generation protocol.
-//! let mut alice_other_participants: Vec<Participant> = vec!(bob.clone(), carol.clone());
-//! let alice_state = DistributedKeyGeneration::<_>::new(&params, &alice_dh_sk, &alice.index, &alice_coeffs,
-//!                                                      &mut alice_other_participants, "Φ").or(Err(()))?;
+//! let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
+//! let alice_state = DistributedKeyGeneration::<_>::new_initial_state(&params, &alice_dh_sk, &alice.index, &alice_coeffs,
+//!                                                      &mut participants, "Φ").or(Err(()))?;
 //!
 //! // Alice then collects the secret shares which they send to the other participants:
 //! let alice_their_encrypted_secret_shares = alice_state.their_encrypted_secret_shares()?;
-//! // send_to_bob(alice_their_encrypted_secret_shares[0]);
-//! // send_to_carol(alice_their_encrypted_secret_shares[1]);
+//! // keep_to_self(alice_their_encrypted_secret_shares[0]);
+//! // send_to_bob(alice_their_encrypted_secret_shares[1]);
+//! // send_to_carol(alice_their_encrypted_secret_shares[2]);
 //!
 //! // Bob enters round one of the distributed key generation protocol.
-//! let mut bob_other_participants: Vec<Participant> = vec!(alice.clone(), carol.clone());
-//! let bob_state = DistributedKeyGeneration::<_>::new(&params, &bob_dh_sk, &bob.index, &bob_coeffs,
-//!                                                    &mut bob_other_participants, "Φ").or(Err(()))?;
+//! let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
+//! let bob_state = DistributedKeyGeneration::<_>::new_initial_state(&params, &bob_dh_sk, &bob.index, &bob_coeffs,
+//!                                                    &mut participants, "Φ").or(Err(()))?;
 //!
 //! // Bob then collects the secret shares which they send to the other participants:
 //! let bob_their_encrypted_secret_shares = bob_state.their_encrypted_secret_shares()?;
 //! // send_to_alice(bob_their_encrypted_secret_shares[0]);
-//! // send_to_carol(bob_their_encrypted_secret_shares[1]);
+//! // keep_to_self(bob_their_encrypted_secret_shares[1]);
+//! // send_to_carol(bob_their_encrypted_secret_shares[2]);
 //!
 //! // Carol enters round one of the distributed key generation protocol.
-//! let mut carol_other_participants: Vec<Participant> = vec!(alice.clone(), bob.clone());
-//! let carol_state = DistributedKeyGeneration::<_>::new(&params, &carol_dh_sk, &carol.index, &carol_coeffs,
-//!                                                      &mut carol_other_participants, "Φ").or(Err(()))?;
+//! let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
+//! let carol_state = DistributedKeyGeneration::<_>::new_initial_state(&params, &carol_dh_sk, &carol.index, &carol_coeffs,
+//!                                                      &mut participants, "Φ").or(Err(()))?;
 //!
 //! // Carol then collects the secret shares which they send to the other participants:
 //! let carol_their_encrypted_secret_shares = carol_state.their_encrypted_secret_shares()?;
 //! // send_to_alice(carol_their_encrypted_secret_shares[0]);
 //! // send_to_bob(carol_their_encrypted_secret_shares[1]);
+//! // keep_to_self(carol_their_encrypted_secret_shares[2]);
 //!
 //! // Each participant now has a vector of secret shares given to them by the other participants:
-//! let alice_my_encrypted_secret_shares = vec!(bob_their_encrypted_secret_shares[0].clone(),
-//!                                   carol_their_encrypted_secret_shares[0].clone());
-//! let bob_my_encrypted_secret_shares = vec!(alice_their_encrypted_secret_shares[0].clone(),
-//!                                 carol_their_encrypted_secret_shares[1].clone());
-//! let carol_my_encrypted_secret_shares = vec!(alice_their_encrypted_secret_shares[1].clone(),
-//!                                   bob_their_encrypted_secret_shares[1].clone());
+//! let alice_my_encrypted_secret_shares = vec!(alice_their_encrypted_secret_shares[0].clone(),
+//!                                     bob_their_encrypted_secret_shares[0].clone(),
+//!                                     carol_their_encrypted_secret_shares[0].clone());
+//! let bob_my_encrypted_secret_shares = vec!(alice_their_encrypted_secret_shares[1].clone(),
+//!                                     bob_their_encrypted_secret_shares[1].clone(),
+//!                                     carol_their_encrypted_secret_shares[1].clone());
+//! let carol_my_encrypted_secret_shares = vec!(alice_their_encrypted_secret_shares[2].clone(),
+//!                                     bob_their_encrypted_secret_shares[2].clone(),
+//!                                     carol_their_encrypted_secret_shares[2].clone());
 //!
 //! // The participants then use these secret shares from the other participants to advance to
 //! // round two of the distributed key generation protocol.
@@ -151,9 +157,9 @@
 //!
 //! // Each participant can now derive their long-lived secret keys and the group's
 //! // public key.
-//! let (alice_group_key, alice_secret_key) = alice_state.finish(alice.commitments).or(Err(()))?;
-//! let (bob_group_key, bob_secret_key) = bob_state.finish(bob.commitments).or(Err(()))?;
-//! let (carol_group_key, carol_secret_key) = carol_state.finish(carol.commitments).or(Err(()))?;
+//! let (alice_group_key, alice_secret_key) = alice_state.finish().or(Err(()))?;
+//! let (bob_group_key, bob_secret_key) = bob_state.finish().or(Err(()))?;
+//! let (carol_group_key, carol_secret_key) = carol_state.finish().or(Err(()))?;
 //!
 //! // They should all derive the same group public key.
 //! assert!(alice_group_key == bob_group_key);
@@ -167,6 +173,8 @@
 //! ```
 //!
 //! [typestate]: http://cliffle.com/blog/rust-typestate/
+
+// TODO: update examples with different configurations
 
 #[cfg(feature = "std")]
 use std::boxed::Box;
