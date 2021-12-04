@@ -967,78 +967,16 @@ impl DistributedKeyGeneration<RoundOne> {
         context_string: &str,
     ) -> Result<Self, Vec<u32>>
     {
-        let mut their_commitments: Vec<VerifiableSecretSharingCommitment> = Vec::with_capacity(parameters.t as usize);
-        let mut their_dh_public_keys: Vec<(u32, DHPublicKey)> = Vec::with_capacity(parameters.t as usize);
-        let mut misbehaving_participants: Vec<u32> = Vec::new();
-
-        let dh_public_key = DHPublicKey(&RISTRETTO_BASEPOINT_TABLE * &dh_private_key);
-
-        // Bail if we didn't get enough participants.
-        if participants.len() != parameters.n as usize {
-            return Err(misbehaving_participants);
-        }
-
-        // Check the public keys and the DH keys of the participants.
-        for p in participants.iter() {
-            let public_key = match p.public_key() {
-                Some(key) => key,
-                None      => {
-                    misbehaving_participants.push(p.index);
-                    continue;
-                }
-            };
-            match p.proof_of_secret_key.as_ref().unwrap().verify(&p.index, &public_key, &context_string) {
-                Ok(_)  => {
-                            their_commitments.push(p.commitments.as_ref().unwrap().clone());
-                            their_dh_public_keys.push((p.index, p.dh_public_key.clone()));
-
-                            match p.proof_of_dh_private_key.verify(&p.index, &p.dh_public_key, &context_string) {
-                                Ok(_)  => (),
-                                Err(_) => misbehaving_participants.push(p.index),
-                            }
-                          },
-                Err(_) => misbehaving_participants.push(p.index),
-            }
-        }
-
-        // [DIFFERENT_TO_PAPER] If any participant was misbehaving, return their indices.
-        if !misbehaving_participants.is_empty() {
-            return Err(misbehaving_participants);
-        }
-
-        // [DIFFERENT_TO_PAPER] We pre-calculate the secret shares from Round 2
-        // Step 1 here since it doesn't require additional online activity.
-        // RICE-FROST: We also encrypt them into their_encrypted_secret_shares.
-        //
-        // Round 2
-        // Step 1: Each P_i securely sends to each other participant P_l a secret share
-        //         (l, f_i(l)) and keeps (i, f_i(i)) for themselves.
-        let mut their_encrypted_secret_shares: Vec<EncryptedSecretShare> = Vec::with_capacity(parameters.n as usize - 1);
-
-        // XXX need a way to index their_encrypted_secret_shares
-        for p in participants.iter() {
-            let share = SecretShare::evaluate_polynomial(my_index, &p.index, my_coefficients);
-
-            let dh_key = (p.dh_public_key.0 * dh_private_key.0).compress().to_bytes();
-
-            their_encrypted_secret_shares.push(encrypt_share(&share, &dh_key));
-        }
-
-        let state = ActualState {
-            parameters: *parameters,
-            index: *my_index,
-            dh_private_key: dh_private_key.clone(),
-            dh_public_key,
-            their_commitments: Some(their_commitments),
-            their_dh_public_keys,
-            their_encrypted_secret_shares: Some(their_encrypted_secret_shares),
-            my_secret_shares: None,
-        };
-
-        Ok(DistributedKeyGeneration::<RoundOne> {
-            state: Box::new(state),
-            data: RoundOne {},
-        })
+        Self::new_state_internal(
+            parameters,
+            dh_private_key,
+            my_index,
+            Some(my_coefficients),
+            participants,
+            context_string,
+            true,
+            true,
+        )
     }
 
     /// Check the zero-knowledge proofs of knowledge of secret keys of all the
@@ -1062,63 +1000,16 @@ impl DistributedKeyGeneration<RoundOne> {
         context_string: &str,
     ) -> Result<Self, Vec<u32>>
     {
-        let mut their_dh_public_keys: Vec<(u32, DHPublicKey)> = Vec::with_capacity(parameters.t as usize);
-        let mut misbehaving_signers: Vec<u32> = Vec::new();
-
-        let dh_public_key = DHPublicKey(&RISTRETTO_BASEPOINT_TABLE * &dh_private_key);
-
-        // Bail if we didn't get enough signers.
-        if signers.len() != parameters.n as usize {
-            return Err(misbehaving_signers);
-        }
-
-        // Check the DH keys of the signers.
-        for p in signers.iter() {
-            their_dh_public_keys.push((p.index, p.dh_public_key.clone()));
-            match p.proof_of_dh_private_key.verify(&p.index, &p.dh_public_key, &context_string) {
-                Ok(_)  => (),
-                Err(_) => misbehaving_signers.push(p.index),
-            }
-        }
-
-        // [DIFFERENT_TO_PAPER] If any participant was misbehaving, return their indices.
-        if !misbehaving_signers.is_empty() {
-            return Err(misbehaving_signers);
-        }
-
-        // [DIFFERENT_TO_PAPER] We pre-calculate the secret shares from Round 2
-        // Step 1 here since it doesn't require additional online activity.
-        // RICE-FROST: We also encrypt them into their_encrypted_secret_shares.
-        //
-        // Round 2
-        // Step 1: Each P_i securely sends to each other participant P_l a secret share
-        //         (l, f_i(l)) and keeps (i, f_i(i)) for themselves.
-        let mut their_encrypted_secret_shares: Vec<EncryptedSecretShare> = Vec::with_capacity(parameters.n as usize - 1);
-
-        // XXX need a way to index their_encrypted_secret_shares
-        for p in signers.iter() {
-            let share = SecretShare::evaluate_polynomial(my_index, &p.index, my_coefficients);
-
-            let dh_key = (p.dh_public_key.0 * dh_private_key.0).compress().to_bytes();
-
-            their_encrypted_secret_shares.push(encrypt_share(&share, &dh_key));
-        }
-
-        let state = ActualState {
-            parameters: *parameters,
-            index: *my_index,
-            dh_private_key: dh_private_key.clone(),
-            dh_public_key,
-            their_commitments: None,
-            their_dh_public_keys,
-            their_encrypted_secret_shares: Some(their_encrypted_secret_shares),
-            my_secret_shares: None,
-        };
-
-        Ok(DistributedKeyGeneration::<RoundOne> {
-            state: Box::new(state),
-            data: RoundOne {},
-        })
+        Self::new_state_internal(
+            parameters,
+            dh_private_key,
+            my_index,
+            Some(my_coefficients),
+            signers,
+            context_string,
+            true,
+            false,
+        )
     }
 
     /// Check the zero-knowledge proofs of knowledge of secret keys of all the
@@ -1141,43 +1032,110 @@ impl DistributedKeyGeneration<RoundOne> {
         context_string: &str,
     ) -> Result<Self, Vec<u32>>
     {
+        Self::new_state_internal(
+            parameters,
+            dh_private_key,
+            my_index,
+            None,
+            dealers,
+            context_string,
+            false,
+            true,
+        )
+    }
+
+    fn new_state_internal(
+        parameters: &Parameters,
+        dh_private_key: &DHPrivateKey,
+        my_index: &u32,
+        my_coefficients: Option<&Coefficients>,
+        participants: &mut Vec<Participant>,
+        context_string: &str,
+        from_dealer: bool,
+        from_signer: bool,
+    ) -> Result<Self, Vec<u32>>
+    {
         let mut their_commitments: Vec<VerifiableSecretSharingCommitment> = Vec::with_capacity(parameters.t as usize);
         let mut their_dh_public_keys: Vec<(u32, DHPublicKey)> = Vec::with_capacity(parameters.t as usize);
-        let mut misbehaving_dealers: Vec<u32> = Vec::new();
+        let mut misbehaving_participants: Vec<u32> = Vec::new();
 
         let dh_public_key = DHPublicKey(&RISTRETTO_BASEPOINT_TABLE * &dh_private_key);
 
-        // Bail if we didn't get enough dealers.
-        if dealers.len() != parameters.n as usize {
-            return Err(misbehaving_dealers);
+        // Bail if we didn't get enough participants.
+        if participants.len() != parameters.n as usize {
+            return Err(misbehaving_participants);
         }
 
-        // Check the public keys of the dealers, as well as the DH keys.
-        for p in dealers.iter() {
-            let public_key = match p.public_key() {
-                Some(key) => key,
-                None      => {
-                    misbehaving_dealers.push(p.index);
-                    continue;
-                }
-            };
-            match p.proof_of_secret_key.as_ref().unwrap().verify(&p.index, &public_key, &context_string) {
+        // Check the public keys and the DH keys of the participants.
+        for p in participants.iter() {
+            // Always check the DH keys of the participants
+            match p.proof_of_dh_private_key.verify(&p.index, &p.dh_public_key, &context_string) {
                 Ok(_)  => {
-                            their_commitments.push(p.commitments.as_ref().unwrap().clone());
-                            their_dh_public_keys.push((p.index, p.dh_public_key.clone()));
-
-                            match p.proof_of_dh_private_key.verify(&p.index, &p.dh_public_key, &context_string) {
-                                Ok(_)  => (),
-                                Err(_) => misbehaving_dealers.push(p.index),
+                    // Signers additionally check the public keys of the signers
+                    if from_signer {
+                        let public_key = match p.public_key() {
+                            Some(key) => key,
+                            None      => {
+                                misbehaving_participants.push(p.index);
+                                continue;
                             }
-                          },
-                Err(_) => misbehaving_dealers.push(p.index),
+                        };
+                        match p.proof_of_secret_key.as_ref().unwrap().verify(&p.index, &public_key, &context_string) {
+                            Ok(_)  => {
+                                their_commitments.push(p.commitments.as_ref().unwrap().clone());
+                                their_dh_public_keys.push((p.index, p.dh_public_key.clone()));
+                            },
+                            Err(_) => misbehaving_participants.push(p.index),
+                        }
+                    } else {
+                        their_dh_public_keys.push((p.index, p.dh_public_key.clone()));
+                    }
+                },
+                Err(_) => misbehaving_participants.push(p.index),
             }
         }
 
         // [DIFFERENT_TO_PAPER] If any participant was misbehaving, return their indices.
-        if !misbehaving_dealers.is_empty() {
-            return Err(misbehaving_dealers);
+        if !misbehaving_participants.is_empty() {
+            return Err(misbehaving_participants);
+        }
+
+        if !from_dealer && from_signer {
+            let state = ActualState {
+                parameters: *parameters,
+                index: *my_index,
+                dh_private_key: dh_private_key.clone(),
+                dh_public_key,
+                their_commitments: Some(their_commitments),
+                their_dh_public_keys,
+                their_encrypted_secret_shares: None,
+                my_secret_shares: None,
+            };
+
+            return Ok(
+                DistributedKeyGeneration::<RoundOne> {
+                    state: Box::new(state),
+                    data: RoundOne {},
+                }
+            )
+        }
+
+        // [DIFFERENT_TO_PAPER] We pre-calculate the secret shares from Round 2
+        // Step 1 here since it doesn't require additional online activity.
+        // RICE-FROST: We also encrypt them into their_encrypted_secret_shares.
+        //
+        // Round 2
+        // Step 1: Each P_i securely sends to each other participant P_l a secret share
+        //         (l, f_i(l)) and keeps (i, f_i(i)) for themselves.
+        let mut their_encrypted_secret_shares: Vec<EncryptedSecretShare> = Vec::with_capacity(parameters.n as usize - 1);
+
+        // XXX need a way to index their_encrypted_secret_shares
+        for p in participants.iter() {
+            let share = SecretShare::evaluate_polynomial(my_index, &p.index, my_coefficients.unwrap());
+
+            let dh_key = (p.dh_public_key.0 * dh_private_key.0).compress().to_bytes();
+
+            their_encrypted_secret_shares.push(encrypt_share(&share, &dh_key));
         }
 
         let state = ActualState {
@@ -1185,9 +1143,9 @@ impl DistributedKeyGeneration<RoundOne> {
             index: *my_index,
             dh_private_key: dh_private_key.clone(),
             dh_public_key,
-            their_commitments: Some(their_commitments),
+            their_commitments: if !from_signer { None } else { Some(their_commitments) },
             their_dh_public_keys,
-            their_encrypted_secret_shares: None,
+            their_encrypted_secret_shares: Some(their_encrypted_secret_shares),
             my_secret_shares: None,
         };
 
@@ -2779,39 +2737,40 @@ mod test {
             p2.proof_of_secret_key.as_ref().unwrap().verify(&p2.index, &p2.public_key().unwrap(), "Φ").or(Err(()))?;
             p3.proof_of_secret_key.as_ref().unwrap().verify(&p3.index, &p3.public_key().unwrap(), "Φ").or(Err(()))?;
 
-            let mut p1_other_participants: Vec<Participant> = vec!(p2.clone(), p3.clone());
-            let p1_state = DistributedKeyGeneration::<RoundOne>::new_dealer_state(&params,
+            let mut participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p3.clone());
+            let p1_state = DistributedKeyGeneration::<RoundOne>::new_initial_state(&params,
                                                                      &p1_dh_sk,
                                                                      &p1.index,
                                                                      &p1coeffs.unwrap(),
-                                                                     &mut p1_other_participants,
+                                                                     &mut participants,
                                                                      "Φ").or(Err(()))?;
             let p1_their_encrypted_secret_shares = p1_state.their_encrypted_secret_shares()?;
 
-            let mut p2_other_participants: Vec<Participant> = vec!(p1.clone(), p3.clone());
-            let p2_state = DistributedKeyGeneration::<RoundOne>::new_dealer_state(&params,
+            let p2_state = DistributedKeyGeneration::<RoundOne>::new_initial_state(&params,
                                                                      &p2_dh_sk,
                                                                      &p2.index,
                                                                      &p2coeffs.unwrap(),
-                                                                     &mut p2_other_participants,
+                                                                     &mut participants,
                                                                      "Φ").or(Err(()))?;
             let p2_their_encrypted_secret_shares = p2_state.their_encrypted_secret_shares()?;
 
-            let mut p3_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone());
-            let  p3_state = DistributedKeyGeneration::<RoundOne>::new_dealer_state(&params,
+            let  p3_state = DistributedKeyGeneration::<RoundOne>::new_initial_state(&params,
                                                                       &p3_dh_sk,
                                                                       &p3.index,
                                                                       &p3coeffs.unwrap(),
-                                                                      &mut p3_other_participants,
+                                                                      &mut participants,
                                                                       "Φ").or(Err(()))?;
             let p3_their_encrypted_secret_shares = p3_state.their_encrypted_secret_shares()?;
 
-            let p1_my_encrypted_secret_shares = vec!(p2_their_encrypted_secret_shares[0].clone(), // XXX FIXME indexing
+            let p1_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[0].clone(),
+                                           p2_their_encrypted_secret_shares[0].clone(),
                                            p3_their_encrypted_secret_shares[0].clone());
-            let p2_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[0].clone(),
+            let p2_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[1].clone(),
+                                           p2_their_encrypted_secret_shares[1].clone(),
                                            p3_their_encrypted_secret_shares[1].clone());
-            let p3_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[1].clone(),
-                                           p2_their_encrypted_secret_shares[1].clone());
+            let p3_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[2].clone(),
+                                           p2_their_encrypted_secret_shares[2].clone(),
+                                           p3_their_encrypted_secret_shares[2].clone());
 
             let p1_state = p1_state.to_round_two(p1_my_encrypted_secret_shares).or(Err(()))?;
             let p2_state = p2_state.to_round_two(p2_my_encrypted_secret_shares).or(Err(()))?;
