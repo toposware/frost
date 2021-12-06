@@ -35,7 +35,7 @@ fn signing_and_verification_3_out_of_5() {
     let (p5, p5coeffs, p5_dh_sk) = Participant::new_dealer(&params, 5, "Φ");
 
     let mut participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p3.clone(), p4.clone(), p5.clone());
-    let p1_state = DistributedKeyGeneration::<_>::new_initial_state(&params,
+    let p1_state = DistributedKeyGeneration::<_>::new_initial(&params,
                                                              &p1_dh_sk,
                                                              &p1.index,
                                                              &p1coeffs,
@@ -43,7 +43,7 @@ fn signing_and_verification_3_out_of_5() {
                                                              "Φ").unwrap();
     let p1_their_encrypted_secret_shares = p1_state.their_encrypted_secret_shares().unwrap();
 
-    let p2_state = DistributedKeyGeneration::<_>::new_initial_state(&params,
+    let p2_state = DistributedKeyGeneration::<_>::new_initial(&params,
                                                              &p2_dh_sk,
                                                              &p2.index,
                                                              &p2coeffs,
@@ -51,7 +51,7 @@ fn signing_and_verification_3_out_of_5() {
                                                              "Φ").unwrap();
     let p2_their_encrypted_secret_shares = p2_state.their_encrypted_secret_shares().unwrap();
 
-    let  p3_state = DistributedKeyGeneration::<_>::new_initial_state(&params,
+    let  p3_state = DistributedKeyGeneration::<_>::new_initial(&params,
                                                              &p3_dh_sk,
                                                              &p3.index,
                                                              &p3coeffs,
@@ -59,7 +59,7 @@ fn signing_and_verification_3_out_of_5() {
                                                              "Φ").unwrap();
     let p3_their_encrypted_secret_shares = p3_state.their_encrypted_secret_shares().unwrap();
 
-    let p4_state = DistributedKeyGeneration::<_>::new_initial_state(&params,
+    let p4_state = DistributedKeyGeneration::<_>::new_initial(&params,
                                                              &p4_dh_sk,
                                                              &p4.index,
                                                              &p4coeffs,
@@ -67,7 +67,7 @@ fn signing_and_verification_3_out_of_5() {
                                                              "Φ").unwrap();
     let p4_their_encrypted_secret_shares = p4_state.their_encrypted_secret_shares().unwrap();
 
-    let p5_state = DistributedKeyGeneration::<_>::new_initial_state(&params,
+    let p5_state = DistributedKeyGeneration::<_>::new_initial(&params,
                                                              &p5_dh_sk,
                                                              &p5.index,
                                                              &p5coeffs,
@@ -157,7 +157,7 @@ fn signing_and_verification_with_ed25519_dalek_2_out_of_3() {
     let (p3, p3coeffs, p3_dh_sk) = Participant::new_dealer(&params, 3, "Φ");
 
     let mut participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p3.clone());
-    let p1_state = DistributedKeyGeneration::<_>::new_initial_state(&params,
+    let p1_state = DistributedKeyGeneration::<_>::new_initial(&params,
                                                       &p1_dh_sk,
                                                       &p1.index,
                                                       &p1coeffs,
@@ -165,7 +165,7 @@ fn signing_and_verification_with_ed25519_dalek_2_out_of_3() {
                                                       "Φ").unwrap();
     let p1_their_encrypted_secret_shares = p1_state.their_encrypted_secret_shares().unwrap();
 
-    let p2_state = DistributedKeyGeneration::<>::new_initial_state(&params,
+    let p2_state = DistributedKeyGeneration::<>::new_initial(&params,
                                                      &p2_dh_sk,
                                                      &p2.index,
                                                      &p2coeffs,
@@ -173,7 +173,7 @@ fn signing_and_verification_with_ed25519_dalek_2_out_of_3() {
                                                      "Φ").unwrap();
     let p2_their_encrypted_secret_shares = p2_state.their_encrypted_secret_shares().unwrap();
 
-    let p3_state = DistributedKeyGeneration::<_>::new_initial_state(&params,
+    let p3_state = DistributedKeyGeneration::<_>::new_initial(&params,
                                                       &p3_dh_sk,
                                                       &p3.index,
                                                       &p3coeffs,

@@ -59,7 +59,7 @@ mod dkg_benches {
         }
 
         c.bench_function("Round One", move |b| {
-            b.iter(|| DistributedKeyGeneration::<_>::new_initial_state(&params,
+            b.iter(|| DistributedKeyGeneration::<_>::new_initial(&params,
                                                          &p1_dh_sk,
                                                          &p1.index,
                                                          &coefficient,
@@ -84,7 +84,7 @@ mod dkg_benches {
 
         let mut p1_my_encrypted_secret_shares = Vec::<EncryptedSecretShare>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
 
-        let p1_state = DistributedKeyGeneration::<_>::new_initial_state(&params,
+        let p1_state = DistributedKeyGeneration::<_>::new_initial(&params,
                                                           &dh_secret_keys[0],
                                                           &participants[0].index.clone(),
                                                           &coefficients[0],
@@ -94,7 +94,7 @@ mod dkg_benches {
         p1_my_encrypted_secret_shares.push(p1_their_encrypted_secret_shares[0].clone());
 
         for i in 2..NUMBER_OF_PARTICIPANTS+1 {
-            let pi_state = DistributedKeyGeneration::<_>::new_initial_state(&params,
+            let pi_state = DistributedKeyGeneration::<_>::new_initial(&params,
                                                               &dh_secret_keys[(i-1) as usize],
                                                               &participants[(i-1) as usize].index.clone(),
                                                               &coefficients[(i-1) as usize],
@@ -125,7 +125,7 @@ mod dkg_benches {
 
         let mut p1_my_encrypted_secret_shares = Vec::<EncryptedSecretShare>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
 
-        let p1_state = DistributedKeyGeneration::<_>::new_initial_state(&params,
+        let p1_state = DistributedKeyGeneration::<_>::new_initial(&params,
                                                           &dh_secret_keys[0],
                                                           &participants[0].index.clone(),
                                                           &coefficients[0],
@@ -135,7 +135,7 @@ mod dkg_benches {
         p1_my_encrypted_secret_shares.push(p1_their_encrypted_secret_shares[0].clone());
 
         for i in 2..NUMBER_OF_PARTICIPANTS+1 {
-            let pi_state = DistributedKeyGeneration::<_>::new_initial_state(&params,
+            let pi_state = DistributedKeyGeneration::<_>::new_initial(&params,
                                                               &dh_secret_keys[(i-1) as usize],
                                                               &participants[(i-1) as usize].index.clone(),
                                                               &coefficients[(i-1) as usize],
@@ -187,7 +187,7 @@ mod sign_benches {
         let mut participants_states_2 = Vec::<DistributedKeyGeneration::<_>>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
 
         for i in 0..NUMBER_OF_PARTICIPANTS {
-            let pi_state = DistributedKeyGeneration::<_>::new_initial_state(&params,
+            let pi_state = DistributedKeyGeneration::<_>::new_initial(&params,
                                                               &dh_secret_keys[i as usize],
                                                               &participants[i as usize].index.clone(),
                                                               &coefficients[i as usize],
@@ -272,7 +272,7 @@ mod sign_benches {
         let mut participants_states_2 = Vec::<DistributedKeyGeneration::<_>>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
 
         for i in 0..NUMBER_OF_PARTICIPANTS {
-            let pi_state = DistributedKeyGeneration::<_>::new_initial_state(&params,
+            let pi_state = DistributedKeyGeneration::<_>::new_initial(&params,
                                                               &dh_secret_keys[i as usize],
                                                               &participants[i as usize].index.clone(),
                                                               &coefficients[i as usize],
@@ -367,7 +367,7 @@ mod sign_benches {
         let mut participants_states_2 = Vec::<DistributedKeyGeneration::<_>>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
 
         for i in 0..NUMBER_OF_PARTICIPANTS {
-            let pi_state = DistributedKeyGeneration::<_>::new_initial_state(&params,
+            let pi_state = DistributedKeyGeneration::<_>::new_initial(&params,
                                                               &dh_secret_keys[i as usize],
                                                               &participants[i as usize].index.clone(),
                                                               &coefficients[i as usize],
