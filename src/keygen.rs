@@ -1922,6 +1922,11 @@ impl IndividualPublicKey {
         let mut rhs: RistrettoPoint = RistrettoPoint::identity();
         let term: Scalar = self.index.into();
 
+        let mut index_vector: Vec<u32> = Vec::new();
+        for commitment in commitments.iter() {
+            index_vector.push(commitment.index);
+        }
+
         for commitment in commitments.iter() {
             let mut tmp: RistrettoPoint = RistrettoPoint::identity();
             for (index, com) in commitment.points.iter().rev().enumerate() {
@@ -1931,7 +1936,13 @@ impl IndividualPublicKey {
                     tmp *= term;
                 }
             }
-            rhs += tmp;
+
+            let coeff = match calculate_lagrange_coefficients(&commitment.index, &index_vector) {
+                Ok(s) => s,
+                Err(error) => return Err(Error::Custom(error.to_string())),
+            };
+
+            rhs += tmp * coeff;
         }
 
         match self.share.compress() == rhs.compress() {
@@ -1967,6 +1978,11 @@ impl IndividualPublicKey {
         let mut share: RistrettoPoint = RistrettoPoint::identity();
         let term: Scalar = participant_index.into();
 
+        let mut index_vector: Vec<u32> = Vec::new();
+        for commitment in commitments.iter() {
+            index_vector.push(commitment.index);
+        }
+
         for commitment in commitments.iter() {
             let mut tmp: RistrettoPoint = RistrettoPoint::identity();
             for (index, com) in commitment.points.iter().rev().enumerate() {
@@ -1976,7 +1992,9 @@ impl IndividualPublicKey {
                     tmp *= term;
                 }
             }
-            share += tmp;
+
+            let coeff = calculate_lagrange_coefficients(&commitment.index, &index_vector).unwrap();
+            share += tmp * coeff;
         }
 
         IndividualPublicKey {
@@ -2742,11 +2760,11 @@ mod test {
                                                                       "Φ").or(Err(()))?;
             let p3_their_encrypted_secret_shares = p3_state.their_encrypted_secret_shares()?;
 
-            let complaint: Complaint;
+            let mut complaint: Complaint;
 
             // Wrong decryption from nonce
             {
-                let mut wrong_encrypted_secret_share = p1_their_encrypted_secret_shares[0].clone();
+                let mut wrong_encrypted_secret_share = p1_their_encrypted_secret_shares[1].clone();
                 wrong_encrypted_secret_share.nonce = [42; 16];
                 let p1_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[0].clone(),
                                                p2_their_encrypted_secret_shares[0].clone(),
@@ -2776,8 +2794,9 @@ mod test {
 
                     assert!(p1_group_key.0.compress() == p3_group_key.0.compress());
 
-                    // Copy for next test
+                    // Copy for next test and change dh_key
                     complaint = complaints[0].clone();
+                    complaint.dh_key[0] += 1;
                 } else {
                     return Err(())
                 }
@@ -2785,7 +2804,7 @@ mod test {
 
             // Wrong decryption of polynomial evaluation
             {
-                let mut wrong_encrypted_secret_share = p1_their_encrypted_secret_shares[0].clone();
+                let mut wrong_encrypted_secret_share = p1_their_encrypted_secret_shares[1].clone();
                 wrong_encrypted_secret_share.encrypted_polynomial_evaluation = [42; 32];
                 let p1_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[0].clone(),
                                                p2_their_encrypted_secret_shares[0].clone(),
