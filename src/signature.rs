@@ -1071,6 +1071,430 @@ mod test {
     }
 
     #[test]
+    fn signing_and_verification_static_2_out_of_3() {
+        fn do_keygen() -> Result<(Parameters, SecretKey, SecretKey, SecretKey, SecretKey, SecretKey, SecretKey, GroupKey), ()> {
+            let params = Parameters { n: 3, t: 2 };
+
+            let (dealer1, dealer1coeffs, dealer1_dh_sk) = Participant::new_dealer(&params, 1, "Φ");
+            let (dealer2, dealer2coeffs, dealer2_dh_sk) = Participant::new_dealer(&params, 2, "Φ");
+            let (dealer3, dealer3coeffs, dealer3_dh_sk) = Participant::new_dealer(&params, 3, "Φ");
+
+            dealer1.proof_of_secret_key.as_ref().unwrap().verify(&dealer1.index, &dealer1.public_key().unwrap(), "Φ").or(Err(()))?;
+            dealer2.proof_of_secret_key.as_ref().unwrap().verify(&dealer2.index, &dealer2.public_key().unwrap(), "Φ").or(Err(()))?;
+            dealer3.proof_of_secret_key.as_ref().unwrap().verify(&dealer3.index, &dealer3.public_key().unwrap(), "Φ").or(Err(()))?;
+
+            let mut dealers: Vec<Participant> = vec!(dealer1.clone(), dealer2.clone(), dealer3.clone());
+            let dealer1_state = DistributedKeyGeneration::<RoundOne>::new_initial_state(&params,
+                                                                     &dealer1_dh_sk,
+                                                                     &dealer1.index,
+                                                                     &dealer1coeffs,
+                                                                     &mut dealers,
+                                                                     "Φ").or(Err(()))?;
+            let dealer1_their_encrypted_secret_shares = dealer1_state.their_encrypted_secret_shares()?;
+
+            let dealer2_state = DistributedKeyGeneration::<RoundOne>::new_initial_state(&params,
+                                                                     &dealer2_dh_sk,
+                                                                     &dealer2.index,
+                                                                     &dealer2coeffs,
+                                                                     &mut dealers,
+                                                                     "Φ").or(Err(()))?;
+            let dealer2_their_encrypted_secret_shares = dealer2_state.their_encrypted_secret_shares()?;
+
+            let dealer3_state = DistributedKeyGeneration::<RoundOne>::new_initial_state(&params,
+                                                                     &dealer3_dh_sk,
+                                                                     &dealer3.index,
+                                                                     &dealer3coeffs,
+                                                                     &mut dealers,
+                                                                     "Φ").or(Err(()))?;
+            let dealer3_their_encrypted_secret_shares = dealer3_state.their_encrypted_secret_shares()?;
+
+            let dealer1_my_encrypted_secret_shares = vec!(dealer1_their_encrypted_secret_shares[0].clone(),
+                                                          dealer2_their_encrypted_secret_shares[0].clone(),
+                                                          dealer3_their_encrypted_secret_shares[0].clone());
+            let dealer2_my_encrypted_secret_shares = vec!(dealer1_their_encrypted_secret_shares[1].clone(),
+                                                          dealer2_their_encrypted_secret_shares[1].clone(),
+                                                          dealer3_their_encrypted_secret_shares[1].clone());
+            let dealer3_my_encrypted_secret_shares = vec!(dealer1_their_encrypted_secret_shares[2].clone(),
+                                                          dealer2_their_encrypted_secret_shares[2].clone(),
+                                                          dealer3_their_encrypted_secret_shares[2].clone());
+
+            let dealer1_state = dealer1_state.to_round_two(dealer1_my_encrypted_secret_shares).or(Err(()))?;
+            let dealer2_state = dealer2_state.to_round_two(dealer2_my_encrypted_secret_shares).or(Err(()))?;
+            let dealer3_state = dealer3_state.to_round_two(dealer3_my_encrypted_secret_shares).or(Err(()))?;
+
+            let (dealer1_group_key, dealer1_secret_key) = dealer1_state.finish().or(Err(()))?;
+            let (dealer2_group_key, dealer2_secret_key) = dealer2_state.finish().or(Err(()))?;
+            let (dealer3_group_key, dealer3_secret_key) = dealer3_state.finish().or(Err(()))?;
+
+            assert!(dealer1_group_key.0.compress() == dealer2_group_key.0.compress());
+            assert!(dealer2_group_key.0.compress() == dealer3_group_key.0.compress());
+
+            let (signer1, signer1_dh_sk) = Participant::new_signer(&params, 1, "Φ");
+            let (signer2, signer2_dh_sk) = Participant::new_signer(&params, 2, "Φ");
+            let (signer3, signer3_dh_sk) = Participant::new_signer(&params, 3, "Φ");
+
+            let mut signers: Vec<Participant> = vec!(signer1.clone(), signer2.clone(), signer3.clone());
+
+            let (dealer1_for_signers, dealer1_encrypted_shares_for_signers) =
+                Participant::reshare(&params, dealer1_secret_key.clone(), &mut signers, "Φ").map_err(|_| ())?;
+            let (dealer2_for_signers, dealer2_encrypted_shares_for_signers) =
+                Participant::reshare(&params, dealer2_secret_key.clone(), &mut signers, "Φ").map_err(|_| ())?;
+            let (dealer3_for_signers, dealer3_encrypted_shares_for_signers) =
+                Participant::reshare(&params, dealer3_secret_key.clone(), &mut signers, "Φ").map_err(|_| ())?;
+
+            let mut dealers: Vec<Participant> = vec!(dealer1_for_signers, dealer2_for_signers, dealer3_for_signers);
+            let signer1_state = DistributedKeyGeneration::<RoundOne>::new_signer_state(&params,
+                                                                     &signer1_dh_sk,
+                                                                     &signer1.index,
+                                                                     &mut dealers,
+                                                                     "Φ").or(Err(()))?;
+
+            let signer2_state = DistributedKeyGeneration::<RoundOne>::new_signer_state(&params,
+                                                                     &signer2_dh_sk,
+                                                                     &signer2.index,
+                                                                     &mut dealers,
+                                                                     "Φ").or(Err(()))?;
+
+            let signer3_state = DistributedKeyGeneration::<RoundOne>::new_signer_state(&params,
+                                                                     &signer3_dh_sk,
+                                                                     &signer3.index,
+                                                                     &mut dealers,
+                                                                     "Φ").or(Err(()))?;
+
+            let signer1_my_encrypted_secret_shares = vec!(dealer1_encrypted_shares_for_signers[0].clone(),
+                                                          dealer2_encrypted_shares_for_signers[0].clone(),
+                                                          dealer3_encrypted_shares_for_signers[0].clone());
+            let signer2_my_encrypted_secret_shares = vec!(dealer1_encrypted_shares_for_signers[1].clone(),
+                                                          dealer2_encrypted_shares_for_signers[1].clone(),
+                                                          dealer3_encrypted_shares_for_signers[1].clone());
+            let signer3_my_encrypted_secret_shares = vec!(dealer1_encrypted_shares_for_signers[2].clone(),
+                                                          dealer2_encrypted_shares_for_signers[2].clone(),
+                                                          dealer3_encrypted_shares_for_signers[2].clone());
+
+            let signer1_state = signer1_state.to_round_two(signer1_my_encrypted_secret_shares).or(Err(()))?;
+            let signer2_state = signer2_state.to_round_two(signer2_my_encrypted_secret_shares).or(Err(()))?;
+            let signer3_state = signer3_state.to_round_two(signer3_my_encrypted_secret_shares).or(Err(()))?;
+
+            let (signer1_group_key, signer1_secret_key) = signer1_state.finish().or(Err(()))?;
+            let (signer2_group_key, signer2_secret_key) = signer2_state.finish().or(Err(()))?;
+            let (signer3_group_key, signer3_secret_key) = signer3_state.finish().or(Err(()))?;
+
+            assert!(signer1_group_key.0.compress() == signer2_group_key.0.compress());
+            assert!(signer2_group_key.0.compress() == signer3_group_key.0.compress());
+
+            assert!(signer1_group_key.0.compress() == dealer1_group_key.0.compress());
+
+            Ok(
+                (
+                    params,
+                    dealer1_secret_key,
+                    dealer2_secret_key,
+                    dealer3_secret_key,
+                    signer1_secret_key,
+                    signer2_secret_key,
+                    signer3_secret_key,
+                    dealer1_group_key
+                )
+            )
+        }
+        let keygen_protocol = do_keygen();
+
+        assert!(keygen_protocol.is_ok());
+
+        let (params, d1_sk, d2_sk, _d3_sk, s1_sk, s2_sk, _s3_sk, group_key) = keygen_protocol.unwrap();
+
+        let context = b"CONTEXT STRING STOLEN FROM DALEK TEST SUITE";
+        let message = b"This is a test of the tsunami alert system. This is only a test.";
+        let (d1_public_comshares, mut d1_secret_comshares) = generate_commitment_share_lists(&mut OsRng, 1, 1);
+        let (d2_public_comshares, mut d2_secret_comshares) = generate_commitment_share_lists(&mut OsRng, 2, 1);
+
+        let mut aggregator = SignatureAggregator::new(params, group_key, &context[..], &message[..]);
+
+        aggregator.include_signer(1, d1_public_comshares.commitments[0], (&d1_sk).into());
+        aggregator.include_signer(2, d2_public_comshares.commitments[0], (&d2_sk).into());
+
+        let signers = aggregator.get_signers();
+        let message_hash = compute_message_hash(&context[..], &message[..]);
+
+        let d1_partial = d1_sk.sign(&message_hash, &group_key, &mut d1_secret_comshares, 0, signers).unwrap();
+        let d2_partial = d2_sk.sign(&message_hash, &group_key, &mut d2_secret_comshares, 0, signers).unwrap();
+
+        aggregator.include_partial_signature(d1_partial);
+        aggregator.include_partial_signature(d2_partial);
+
+        let aggregator = aggregator.finalize().unwrap();
+        let signing_result = aggregator.aggregate();
+
+        assert!(signing_result.is_ok());
+
+        let threshold_signature = signing_result.unwrap();
+        let verification_result = threshold_signature.verify(&group_key, &message_hash);
+
+        println!("Dealer's signing session: {:?}", verification_result);
+
+        let context = b"CONTEXT STRING STOLEN FROM DALEK TEST SUITE";
+        let message = b"This is a test of the tsunami alert system. This is only a test.";
+        let (s1_public_comshares, mut s1_secret_comshares) = generate_commitment_share_lists(&mut OsRng, 1, 1);
+        let (s2_public_comshares, mut s2_secret_comshares) = generate_commitment_share_lists(&mut OsRng, 2, 1);
+
+        let mut aggregator = SignatureAggregator::new(params, group_key, &context[..], &message[..]);
+
+        aggregator.include_signer(1, s1_public_comshares.commitments[0], (&s1_sk).into());
+        aggregator.include_signer(2, s2_public_comshares.commitments[0], (&s2_sk).into());
+
+        let signers = aggregator.get_signers();
+        let message_hash = compute_message_hash(&context[..], &message[..]);
+
+        let s1_partial = s1_sk.sign(&message_hash, &group_key, &mut s1_secret_comshares, 0, signers).unwrap();
+        let s2_partial = s2_sk.sign(&message_hash, &group_key, &mut s2_secret_comshares, 0, signers).unwrap();
+
+        aggregator.include_partial_signature(s1_partial);
+        aggregator.include_partial_signature(s2_partial);
+
+        let aggregator = aggregator.finalize().unwrap();
+        let signing_result = aggregator.aggregate();
+
+        assert!(signing_result.is_ok());
+
+        let threshold_signature = signing_result.unwrap();
+        let verification_result = threshold_signature.verify(&group_key, &message_hash);
+
+        println!("Signers's signing session: {:?}", verification_result);
+
+        assert!(verification_result.is_ok());
+    }
+
+    #[test]
+    fn signing_and_verification_static_2_out_of_3_into_3_out_of_5() {
+        fn do_keygen() -> 
+            Result<
+                (
+                    Parameters,
+                    Parameters,
+                    SecretKey,
+                    SecretKey,
+                    SecretKey,
+                    SecretKey,
+                    SecretKey,
+                    SecretKey,
+                    SecretKey,
+                    SecretKey,
+                    GroupKey
+                ),
+                ()>
+        {
+            let params_dealers = Parameters { n: 3, t: 2 };
+
+            let (dealer1, dealer1coeffs, dealer1_dh_sk) = Participant::new_dealer(&params_dealers, 1, "Φ");
+            let (dealer2, dealer2coeffs, dealer2_dh_sk) = Participant::new_dealer(&params_dealers, 2, "Φ");
+            let (dealer3, dealer3coeffs, dealer3_dh_sk) = Participant::new_dealer(&params_dealers, 3, "Φ");
+
+            dealer1.proof_of_secret_key.as_ref().unwrap().verify(&dealer1.index, &dealer1.public_key().unwrap(), "Φ").or(Err(()))?;
+            dealer2.proof_of_secret_key.as_ref().unwrap().verify(&dealer2.index, &dealer2.public_key().unwrap(), "Φ").or(Err(()))?;
+            dealer3.proof_of_secret_key.as_ref().unwrap().verify(&dealer3.index, &dealer3.public_key().unwrap(), "Φ").or(Err(()))?;
+
+            let mut dealers: Vec<Participant> = vec!(dealer1.clone(), dealer2.clone(), dealer3.clone());
+            let dealer1_state = DistributedKeyGeneration::<RoundOne>::new_initial_state(&params_dealers,
+                                                                     &dealer1_dh_sk,
+                                                                     &dealer1.index,
+                                                                     &dealer1coeffs,
+                                                                     &mut dealers,
+                                                                     "Φ").or(Err(()))?;
+            let dealer1_their_encrypted_secret_shares = dealer1_state.their_encrypted_secret_shares()?;
+
+            let dealer2_state = DistributedKeyGeneration::<RoundOne>::new_initial_state(&params_dealers,
+                                                                     &dealer2_dh_sk,
+                                                                     &dealer2.index,
+                                                                     &dealer2coeffs,
+                                                                     &mut dealers,
+                                                                     "Φ").or(Err(()))?;
+            let dealer2_their_encrypted_secret_shares = dealer2_state.their_encrypted_secret_shares()?;
+
+            let dealer3_state = DistributedKeyGeneration::<RoundOne>::new_initial_state(&params_dealers,
+                                                                     &dealer3_dh_sk,
+                                                                     &dealer3.index,
+                                                                     &dealer3coeffs,
+                                                                     &mut dealers,
+                                                                     "Φ").or(Err(()))?;
+            let dealer3_their_encrypted_secret_shares = dealer3_state.their_encrypted_secret_shares()?;
+
+            let dealer1_my_encrypted_secret_shares = vec!(dealer1_their_encrypted_secret_shares[0].clone(),
+                                                          dealer2_their_encrypted_secret_shares[0].clone(),
+                                                          dealer3_their_encrypted_secret_shares[0].clone());
+            let dealer2_my_encrypted_secret_shares = vec!(dealer1_their_encrypted_secret_shares[1].clone(),
+                                                          dealer2_their_encrypted_secret_shares[1].clone(),
+                                                          dealer3_their_encrypted_secret_shares[1].clone());
+            let dealer3_my_encrypted_secret_shares = vec!(dealer1_their_encrypted_secret_shares[2].clone(),
+                                                          dealer2_their_encrypted_secret_shares[2].clone(),
+                                                          dealer3_their_encrypted_secret_shares[2].clone());
+
+            let dealer1_state = dealer1_state.to_round_two(dealer1_my_encrypted_secret_shares).or(Err(()))?;
+            let dealer2_state = dealer2_state.to_round_two(dealer2_my_encrypted_secret_shares).or(Err(()))?;
+            let dealer3_state = dealer3_state.to_round_two(dealer3_my_encrypted_secret_shares).or(Err(()))?;
+
+            let (dealer1_group_key, dealer1_secret_key) = dealer1_state.finish().or(Err(()))?;
+            let (dealer2_group_key, dealer2_secret_key) = dealer2_state.finish().or(Err(()))?;
+            let (dealer3_group_key, dealer3_secret_key) = dealer3_state.finish().or(Err(()))?;
+
+            assert!(dealer1_group_key.0.compress() == dealer2_group_key.0.compress());
+            assert!(dealer2_group_key.0.compress() == dealer3_group_key.0.compress());
+
+            let params_signers = Parameters { n: 5, t: 3 };
+            let (signer1, signer1_dh_sk) = Participant::new_signer(&params_signers, 1, "Φ");
+            let (signer2, signer2_dh_sk) = Participant::new_signer(&params_signers, 2, "Φ");
+            let (signer3, signer3_dh_sk) = Participant::new_signer(&params_signers, 3, "Φ");
+            let (signer4, signer4_dh_sk) = Participant::new_signer(&params_signers, 4, "Φ");
+            let (signer5, signer5_dh_sk) = Participant::new_signer(&params_signers, 5, "Φ");
+
+            let mut signers: Vec<Participant> = vec!(signer1.clone(), signer2.clone(), signer3.clone(), signer4.clone(), signer5.clone());
+
+            let (dealer1_for_signers, dealer1_encrypted_shares_for_signers) =
+                Participant::reshare(&params_signers, dealer1_secret_key.clone(), &mut signers, "Φ").map_err(|_| ())?;
+            let (dealer2_for_signers, dealer2_encrypted_shares_for_signers) =
+                Participant::reshare(&params_signers, dealer2_secret_key.clone(), &mut signers, "Φ").map_err(|_| ())?;
+            let (dealer3_for_signers, dealer3_encrypted_shares_for_signers) =
+                Participant::reshare(&params_signers, dealer3_secret_key.clone(), &mut signers, "Φ").map_err(|_| ())?;
+
+            let mut dealers: Vec<Participant> = vec!(dealer1_for_signers, dealer2_for_signers, dealer3_for_signers);
+            let signer1_state = DistributedKeyGeneration::<RoundOne>::new_signer_state(&params_dealers,
+                                                                     &signer1_dh_sk,
+                                                                     &signer1.index,
+                                                                     &mut dealers,
+                                                                     "Φ").or(Err(()))?;
+
+            let signer2_state = DistributedKeyGeneration::<RoundOne>::new_signer_state(&params_dealers,
+                                                                     &signer2_dh_sk,
+                                                                     &signer2.index,
+                                                                     &mut dealers,
+                                                                     "Φ").or(Err(()))?;
+
+            let signer3_state = DistributedKeyGeneration::<RoundOne>::new_signer_state(&params_dealers,
+                                                                     &signer3_dh_sk,
+                                                                     &signer3.index,
+                                                                     &mut dealers,
+                                                                     "Φ").or(Err(()))?;
+
+            let signer4_state = DistributedKeyGeneration::<RoundOne>::new_signer_state(&params_dealers,
+                                                                     &signer4_dh_sk,
+                                                                     &signer4.index,
+                                                                     &mut dealers,
+                                                                     "Φ").or(Err(()))?;
+
+            let signer5_state = DistributedKeyGeneration::<RoundOne>::new_signer_state(&params_dealers,
+                                                                     &signer5_dh_sk,
+                                                                     &signer5.index,
+                                                                     &mut dealers,
+                                                                     "Φ").or(Err(()))?;
+
+            let signer1_my_encrypted_secret_shares = vec!(dealer1_encrypted_shares_for_signers[0].clone(),
+                                                          dealer2_encrypted_shares_for_signers[0].clone(),
+                                                          dealer3_encrypted_shares_for_signers[0].clone());
+            let signer2_my_encrypted_secret_shares = vec!(dealer1_encrypted_shares_for_signers[1].clone(),
+                                                          dealer2_encrypted_shares_for_signers[1].clone(),
+                                                          dealer3_encrypted_shares_for_signers[1].clone());
+            let signer3_my_encrypted_secret_shares = vec!(dealer1_encrypted_shares_for_signers[2].clone(),
+                                                          dealer2_encrypted_shares_for_signers[2].clone(),
+                                                          dealer3_encrypted_shares_for_signers[2].clone());
+            let signer4_my_encrypted_secret_shares = vec!(dealer1_encrypted_shares_for_signers[3].clone(),
+                                                          dealer2_encrypted_shares_for_signers[3].clone(),
+                                                          dealer3_encrypted_shares_for_signers[3].clone());
+            let signer5_my_encrypted_secret_shares = vec!(dealer1_encrypted_shares_for_signers[4].clone(),
+                                                          dealer2_encrypted_shares_for_signers[4].clone(),
+                                                          dealer3_encrypted_shares_for_signers[4].clone());
+
+            let signer1_state = signer1_state.to_round_two(signer1_my_encrypted_secret_shares).or(Err(()))?;
+            let signer2_state = signer2_state.to_round_two(signer2_my_encrypted_secret_shares).or(Err(()))?;
+            let signer3_state = signer3_state.to_round_two(signer3_my_encrypted_secret_shares).or(Err(()))?;
+            let signer4_state = signer4_state.to_round_two(signer4_my_encrypted_secret_shares).or(Err(()))?;
+            let signer5_state = signer5_state.to_round_two(signer5_my_encrypted_secret_shares).or(Err(()))?;
+
+            let (signer1_group_key, signer1_secret_key) = signer1_state.finish().or(Err(()))?;
+            let (signer2_group_key, signer2_secret_key) = signer2_state.finish().or(Err(()))?;
+            let (signer3_group_key, signer3_secret_key) = signer3_state.finish().or(Err(()))?;
+            let (signer4_group_key, signer4_secret_key) = signer4_state.finish().or(Err(()))?;
+            let (signer5_group_key, signer5_secret_key) = signer5_state.finish().or(Err(()))?;
+
+            assert!(signer1_group_key.0.compress() == signer2_group_key.0.compress());
+            assert!(signer2_group_key.0.compress() == signer3_group_key.0.compress());
+            assert!(signer3_group_key.0.compress() == signer4_group_key.0.compress());
+            assert!(signer4_group_key.0.compress() == signer5_group_key.0.compress());
+
+            assert!(signer1_group_key.0.compress() == dealer1_group_key.0.compress());
+
+            Ok((params_dealers, params_signers, dealer1_secret_key, dealer2_secret_key, dealer3_secret_key, signer1_secret_key, signer2_secret_key, signer3_secret_key, signer4_secret_key, signer5_secret_key, dealer1_group_key))
+        }
+        let keygen_protocol = do_keygen();
+
+        assert!(keygen_protocol.is_ok());
+
+        let (d_params, s_params, d1_sk, d2_sk, _d3_sk, s1_sk, s2_sk, s3_sk, _s4_sk, _s5_sk, group_key) = keygen_protocol.unwrap();
+
+        let context = b"CONTEXT STRING STOLEN FROM DALEK TEST SUITE";
+        let message = b"This is a test of the tsunami alert system. This is only a test.";
+        let (d1_public_comshares, mut d1_secret_comshares) = generate_commitment_share_lists(&mut OsRng, 1, 1);
+        let (d2_public_comshares, mut d2_secret_comshares) = generate_commitment_share_lists(&mut OsRng, 2, 1);
+
+        let mut aggregator = SignatureAggregator::new(d_params, group_key, &context[..], &message[..]);
+
+        aggregator.include_signer(1, d1_public_comshares.commitments[0], (&d1_sk).into());
+        aggregator.include_signer(2, d2_public_comshares.commitments[0], (&d2_sk).into());
+
+        let signers = aggregator.get_signers();
+        let message_hash = compute_message_hash(&context[..], &message[..]);
+
+        let d1_partial = d1_sk.sign(&message_hash, &group_key, &mut d1_secret_comshares, 0, signers).unwrap();
+        let d2_partial = d2_sk.sign(&message_hash, &group_key, &mut d2_secret_comshares, 0, signers).unwrap();
+
+        aggregator.include_partial_signature(d1_partial);
+        aggregator.include_partial_signature(d2_partial);
+
+        let aggregator = aggregator.finalize().unwrap();
+        let signing_result = aggregator.aggregate();
+
+        assert!(signing_result.is_ok());
+
+        let threshold_signature = signing_result.unwrap();
+        let verification_result = threshold_signature.verify(&group_key, &message_hash);
+
+        println!("Dealer's signing session: {:?}", verification_result);
+
+        let context = b"CONTEXT STRING STOLEN FROM DALEK TEST SUITE";
+        let message = b"This is a test of the tsunami alert system. This is only a test.";
+        let (s1_public_comshares, mut s1_secret_comshares) = generate_commitment_share_lists(&mut OsRng, 1, 1);
+        let (s2_public_comshares, mut s2_secret_comshares) = generate_commitment_share_lists(&mut OsRng, 2, 1);
+        let (s3_public_comshares, mut s3_secret_comshares) = generate_commitment_share_lists(&mut OsRng, 3, 1);
+
+        let mut aggregator = SignatureAggregator::new(s_params, group_key, &context[..], &message[..]);
+
+        aggregator.include_signer(1, s1_public_comshares.commitments[0], (&s1_sk).into());
+        aggregator.include_signer(2, s2_public_comshares.commitments[0], (&s2_sk).into());
+        aggregator.include_signer(3, s3_public_comshares.commitments[0], (&s3_sk).into());
+
+        let signers = aggregator.get_signers();
+        let message_hash = compute_message_hash(&context[..], &message[..]);
+
+        let s1_partial = s1_sk.sign(&message_hash, &group_key, &mut s1_secret_comshares, 0, signers).unwrap();
+        let s2_partial = s2_sk.sign(&message_hash, &group_key, &mut s2_secret_comshares, 0, signers).unwrap();
+        let s3_partial = s3_sk.sign(&message_hash, &group_key, &mut s3_secret_comshares, 0, signers).unwrap();
+
+        aggregator.include_partial_signature(s1_partial);
+        aggregator.include_partial_signature(s2_partial);
+        aggregator.include_partial_signature(s3_partial);
+
+        let aggregator = aggregator.finalize().unwrap();
+        let signing_result = aggregator.aggregate();
+
+        assert!(signing_result.is_ok());
+
+        let threshold_signature = signing_result.unwrap();
+        let verification_result = threshold_signature.verify(&group_key, &message_hash);
+
+        println!("Signers's signing session: {:?}", verification_result);
+
+        assert!(verification_result.is_ok());
+    }
+
+    #[test]
     fn aggregator_get_signers() {
         let params = Parameters { n: 3, t: 2 };
         let context = b"CONTEXT STRING STOLEN FROM DALEK TEST SUITE";
