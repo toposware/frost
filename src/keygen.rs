@@ -2080,7 +2080,7 @@ impl DistributedKeyGeneration<RoundTwo> {
     /// # Example
     ///
     /// ```ignore
-    /// let (group_key, secret_key) = state.finish(participant.public_key()?)?;
+    /// let (group_key, secret_key) = state.finish()?;
     /// ```
     pub fn finish(mut self) -> Result<(GroupKey, SecretKey), Error> {
         let secret_key = self.calculate_signing_key()?;
@@ -2105,9 +2105,6 @@ impl DistributedKeyGeneration<RoundTwo> {
             index_vector.push(share.sender_index);
         }
 
-        // This time you don't use your own index!
-        // index_vector.push(self.state.my_secret_share.sender_index);
-
         let mut key = Scalar::zero();
 
         for share in my_secret_shares.iter() {
@@ -2117,14 +2114,6 @@ impl DistributedKeyGeneration<RoundTwo> {
             };
             key += share.polynomial_evaluation * coeff;
         }
-
-        // You don't use your secret share in the computation.
-        /* let my_coeff = match calculate_lagrange_coefficients(&self.state.my_secret_share.sender_index, &index_vector) {
-                Ok(s) => s,
-                Err(error) => return Err(Error::Custom(error.to_string())),
-            };
-
-        key += self.state.my_secret_share.polynomial_evaluation * my_coeff; */
 
         Ok(SecretKey { index: self.state.index, key })
     }
