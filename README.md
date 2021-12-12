@@ -1,7 +1,7 @@
 
 # ICE-FROST
 
-A fork of the Rust implementation of [FROST: Flexible Round-Optimised Schnorr Threshold signatures](https://eprint.iacr.org/2020/852) by Chelsea Komlo and Ian Goldberg, originally developed at https://github.com/isislovecruft/frost-dalek and adapted to support additional Identifiable Cheating Entity property. This new protocol is named [ICE-FROST](https://eprint.iacr.org/2021/1658).
+A fork of the Rust implementation of [FROST: Flexible Round-Optimised Schnorr Threshold signatures](https://eprint.iacr.org/2020/852) by Chelsea Komlo and Ian Goldberg, originally developed at https://github.com/isislovecruft/frost-dalek and adapted to support additional Identifiable Cheating Entity property and Static group keys. This new protocol is named [ICE-FROST](https://eprint.iacr.org/2021/1658).
 
 ## Usage
 
