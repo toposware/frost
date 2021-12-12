@@ -62,6 +62,8 @@
 //! #
 //! # let params = Parameters { t: 2, n: 3 };
 //! 
+//! // Each application developer should choose a context string as unique to their usage
+//! // as possible (instead of the below "Φ"), in order to prevent replay attacks.
 //! let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ");
 //! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ");
 //! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ");
@@ -98,7 +100,8 @@
 //! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ");
 //! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ");
 //! #
-//! alice.proof_of_secret_key.as_ref().unwrap().verify(&alice.index, &alice.public_key().unwrap(), "Φ").or(Err(()))?;
+//! alice.proof_of_secret_key.as_ref().unwrap()
+//!     .verify(&alice.index, &alice.public_key().unwrap(), "Φ").or(Err(()))?;
 //! # Ok(()) } fn main() { assert!(do_test().is_ok()); }
 //! ```
 //!
@@ -117,7 +120,8 @@
 //! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ");
 //! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ");
 //! #
-//! bob.proof_of_secret_key.as_ref().unwrap().verify(&bob.index, &bob.public_key().unwrap(), "Φ").or(Err(()))?;
+//! bob.proof_of_secret_key.as_ref().unwrap()
+//!     .verify(&bob.index, &bob.public_key().unwrap(), "Φ").or(Err(()))?;
 //! # Ok(()) } fn main() { assert!(do_test().is_ok()); }
 //! ```
 //!
@@ -136,7 +140,8 @@
 //! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ");
 //! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ");
 //! #
-//! carol.proof_of_secret_key.as_ref().unwrap().verify(&carol.index, &carol.public_key().unwrap(), "Φ").or(Err(()))?;
+//! carol.proof_of_secret_key.as_ref().unwrap()
+//!     .verify(&carol.index, &carol.public_key().unwrap(), "Φ").or(Err(()))?;
 //! # Ok(()) } fn main() { assert!(do_test().is_ok()); }
 //! ```
 //!
@@ -144,22 +149,30 @@
 //!
 //! ```rust
 //! use ice_frost::DistributedKeyGeneration;
+//! # use ice_frost::Error;
 //! # use ice_frost::Parameters;
 //! # use ice_frost::Participant;
 //! # use curve25519_dalek::ristretto::RistrettoPoint;
 //! # use curve25519_dalek::traits::Identity;
 //! # use curve25519_dalek::scalar::Scalar;
 //! #
-//! # fn do_test() -> Result<(), Vec<u32>> {
+//! # fn do_test() -> Result<(), Error> {
 //! # let params = Parameters { t: 2, n: 3 };
 //! #
 //! let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ");
 //! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ");
 //! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ");
 //!
-//! let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! let alice_state = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
-//!                                                      &mut participants, "Φ")?;
+//! let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
+//! let (alice_state, participant_lists) =
+//!     DistributedKeyGeneration::<_>::new_initial(
+//!         &params,
+//!         &alice_dh_sk,
+//!         &alice.index,
+//!         &alice_coefficients,
+//!         &participants,
+//!         "Φ",
+//!     )?;
 //! # Ok(()) } fn main() { assert!(do_test().is_ok()); }
 //! ```
 //!
@@ -180,9 +193,9 @@
 //! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ");
 //! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ");
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let alice_state = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
-//! #                                                      &mut participants, "Φ").or(Err(()))?;
+//! # let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
+//! # let (alice_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
+//! #                                                      &participants, "Φ").or(Err(()))?;
 //! let alice_their_encrypted_secret_shares = alice_state.their_encrypted_secret_shares()?;
 //!
 //! // send_to_bob(alice_their_encrypted_secret_shares[0]);
@@ -194,22 +207,30 @@
 //!
 //! ```rust
 //! # use ice_frost::DistributedKeyGeneration;
+//! # use ice_frost::Error;
 //! # use ice_frost::Parameters;
 //! # use ice_frost::Participant;
 //! # use curve25519_dalek::ristretto::RistrettoPoint;
 //! # use curve25519_dalek::traits::Identity;
 //! # use curve25519_dalek::scalar::Scalar;
 //! #
-//! # fn do_test() -> Result<(), Vec<u32>> {
+//! # fn do_test() -> Result<(), Error> {
 //! # let params = Parameters { t: 2, n: 3 };
 //! #
 //! let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ");
 //! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ");
 //! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ");
 //! #
-//! let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! let bob_state = DistributedKeyGeneration::<_>::new_initial(&params, &bob_dh_sk, &bob.index, &bob_coefficients,
-//!                                                    &mut participants, "Φ")?;
+//! let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
+//! let (bob_state, participant_lists) =
+//!     DistributedKeyGeneration::<_>::new_initial(
+//!         &params,
+//!         &bob_dh_sk,
+//!         &bob.index,
+//!         &bob_coefficients,
+//!         &participants,
+//!         "Φ",
+//!     )?;
 //! # Ok(()) }
 //! # fn do_test2() -> Result<(), ()> {
 //! # let params = Parameters { t: 2, n: 3 };
@@ -218,9 +239,9 @@
 //! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ");
 //! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ");
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let bob_state = DistributedKeyGeneration::<_>::new_initial(&params, &bob_dh_sk, &bob.index, &bob_coefficients,
-//! #                                                    &mut participants, "Φ").or(Err(()))?;
+//! # let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
+//! # let (bob_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &bob_dh_sk, &bob.index, &bob_coefficients,
+//! #                                                    &participants, "Φ").or(Err(()))?;
 //!
 //! let bob_their_encrypted_secret_shares = bob_state.their_encrypted_secret_shares()?;
 //!
@@ -233,22 +254,30 @@
 //!
 //! ```rust
 //! # use ice_frost::DistributedKeyGeneration;
+//! # use ice_frost::Error;
 //! # use ice_frost::Parameters;
 //! # use ice_frost::Participant;
 //! # use curve25519_dalek::ristretto::RistrettoPoint;
 //! # use curve25519_dalek::traits::Identity;
 //! # use curve25519_dalek::scalar::Scalar;
 //! #
-//! # fn do_test() -> Result<(), Vec<u32>> {
+//! # fn do_test() -> Result<(), Error> {
 //! # let params = Parameters { t: 2, n: 3 };
 //! #
 //! let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ");
 //! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ");
 //! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ");
 //! #
-//! let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! let carol_state = DistributedKeyGeneration::<_>::new_initial(&params, &carol_dh_sk, &carol.index, &carol_coefficients,
-//!                                                      &mut participants, "Φ")?;
+//! let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
+//! let (carol_state, participant_lists) =
+//!     DistributedKeyGeneration::<_>::new_initial(
+//!         &params,
+//!         &carol_dh_sk,
+//!         &carol.index,
+//!         &carol_coefficients,
+//!         &participants,
+//!         "Φ",
+//!     )?;
 //! # Ok(()) }
 //! # fn do_test2() -> Result<(), ()> {
 //! # let params = Parameters { t: 2, n: 3 };
@@ -257,9 +286,9 @@
 //! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ");
 //! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ");
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let carol_state = DistributedKeyGeneration::<_>::new_initial(&params, &carol_dh_sk, &carol.index, &carol_coefficients,
-//! #                                                      &mut participants, "Φ").or(Err(()))?;
+//! # let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
+//! # let (carol_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &carol_dh_sk, &carol.index, &carol_coefficients,
+//! #                                                      &participants, "Φ").or(Err(()))?;
 //!
 //! let carol_their_encrypted_secret_shares = carol_state.their_encrypted_secret_shares()?;
 //!
@@ -285,19 +314,17 @@
 //! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ");
 //! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ");
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let alice_state = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
-//! #                                                      &mut participants, "Φ").or(Err(()))?;
+//! # let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
+//! # let (alice_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
+//! #                                                      &participants, "Φ").or(Err(()))?;
 //! # let alice_their_encrypted_secret_shares = alice_state.their_encrypted_secret_shares()?;
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let bob_state = DistributedKeyGeneration::<_>::new_initial(&params, &bob_dh_sk, &bob.index, &bob_coefficients,
-//! #                                                    &mut participants, "Φ").or(Err(()))?;
+//! # let (bob_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &bob_dh_sk, &bob.index, &bob_coefficients,
+//! #                                                    &participants, "Φ").or(Err(()))?;
 //! # let bob_their_encrypted_secret_shares = bob_state.their_encrypted_secret_shares()?;
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let carol_state = DistributedKeyGeneration::<_>::new_initial(&params, &carol_dh_sk, &carol.index, &carol_coefficients,
-//! #                                                      &mut participants, "Φ").or(Err(()))?;
+//! # let (carol_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &carol_dh_sk, &carol.index, &carol_coefficients,
+//! #                                                      &participants, "Φ").or(Err(()))?;
 //! # let carol_their_encrypted_secret_shares = carol_state.their_encrypted_secret_shares()?;
 //! let alice_my_encrypted_secret_shares = vec!(alice_their_encrypted_secret_shares[0].clone(),
 //!                                   bob_their_encrypted_secret_shares[0].clone(),
@@ -329,19 +356,17 @@
 //! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ");
 //! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ");
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let alice_state = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
-//! #                                                      &mut participants, "Φ").or(Err(()))?;
+//! # let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
+//! # let (alice_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
+//! #                                                      &participants, "Φ").or(Err(()))?;
 //! # let alice_their_encrypted_secret_shares = alice_state.their_encrypted_secret_shares()?;
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let bob_state = DistributedKeyGeneration::<_>::new_initial(&params, &bob_dh_sk, &bob.index, &bob_coefficients,
-//! #                                                    &mut participants, "Φ").or(Err(()))?;
+//! # let (bob_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &bob_dh_sk, &bob.index, &bob_coefficients,
+//! #                                                    &participants, "Φ").or(Err(()))?;
 //! # let bob_their_encrypted_secret_shares = bob_state.their_encrypted_secret_shares()?;
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let carol_state = DistributedKeyGeneration::<_>::new_initial(&params, &carol_dh_sk, &carol.index, &carol_coefficients,
-//! #                                                      &mut participants, "Φ").or(Err(()))?;
+//! # let (carol_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &carol_dh_sk, &carol.index, &carol_coefficients,
+//! #                                                      &participants, "Φ").or(Err(()))?;
 //! # let carol_their_encrypted_secret_shares = carol_state.their_encrypted_secret_shares()?;
 //! # let alice_my_encrypted_secret_shares = vec!(alice_their_encrypted_secret_shares[0].clone(),
 //! #                                   bob_their_encrypted_secret_shares[0].clone(),
@@ -378,19 +403,17 @@
 //! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ");
 //! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ");
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let alice_state = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
-//! #                                                      &mut participants, "Φ").or(Err(()))?;
+//! # let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
+//! # let (alice_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
+//! #                                                      &participants, "Φ").or(Err(()))?;
 //! # let alice_their_encrypted_secret_shares = alice_state.their_encrypted_secret_shares()?;
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let bob_state = DistributedKeyGeneration::<_>::new_initial(&params, &bob_dh_sk, &bob.index, &bob_coefficients,
-//! #                                                    &mut participants, "Φ").or(Err(()))?;
+//! # let (bob_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &bob_dh_sk, &bob.index, &bob_coefficients,
+//! #                                                    &participants, "Φ").or(Err(()))?;
 //! # let bob_their_encrypted_secret_shares = bob_state.their_encrypted_secret_shares()?;
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let carol_state = DistributedKeyGeneration::<_>::new_initial(&params, &carol_dh_sk, &carol.index, &carol_coefficients,
-//! #                                                      &mut participants, "Φ").or(Err(()))?;
+//! # let (carol_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &carol_dh_sk, &carol.index, &carol_coefficients,
+//! #                                                      &participants, "Φ").or(Err(()))?;
 //! # let carol_their_encrypted_secret_shares = carol_state.their_encrypted_secret_shares()?;
 //! # let alice_my_encrypted_secret_shares = vec!(alice_their_encrypted_secret_shares[0].clone(),
 //! #                                   bob_their_encrypted_secret_shares[0].clone(),
@@ -427,9 +450,9 @@
 //! Claire and David, to sign with respect to the same group's public key.
 //!
 //! ```rust
-//! # use frost_dalek::DistributedKeyGeneration;
-//! # use frost_dalek::Parameters;
-//! # use frost_dalek::Participant;
+//! # use ice_frost::DistributedKeyGeneration;
+//! # use ice_frost::Parameters;
+//! # use ice_frost::Participant;
 //! # use curve25519_dalek::ristretto::RistrettoPoint;
 //! # use curve25519_dalek::traits::Identity;
 //! # use curve25519_dalek::scalar::Scalar;
@@ -443,19 +466,17 @@
 //! 
 //! // Perform regular 2-out-of-3 DKG...
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let alice_state = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
-//! #                                                      &mut participants, "Φ").or(Err(()))?;
+//! # let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
+//! # let (alice_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
+//! #                                                      &participants, "Φ").or(Err(()))?;
 //! # let alice_their_encrypted_secret_shares = alice_state.their_encrypted_secret_shares()?;
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let bob_state = DistributedKeyGeneration::<_>::new_initial(&params, &bob_dh_sk, &bob.index, &bob_coefficients,
-//! #                                                    &mut participants, "Φ").or(Err(()))?;
+//! # let (bob_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &bob_dh_sk, &bob.index, &bob_coefficients,
+//! #                                                    &participants, "Φ").or(Err(()))?;
 //! # let bob_their_encrypted_secret_shares = bob_state.their_encrypted_secret_shares()?;
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let carol_state = DistributedKeyGeneration::<_>::new_initial(&params, &carol_dh_sk, &carol.index, &carol_coefficients,
-//! #                                                      &mut participants, "Φ").or(Err(()))?;
+//! # let (carol_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &carol_dh_sk, &carol.index, &carol_coefficients,
+//! #                                                      &participants, "Φ").or(Err(()))?;
 //! # let carol_their_encrypted_secret_shares = carol_state.their_encrypted_secret_shares()?;
 //! # let alice_my_encrypted_secret_shares = vec!(alice_their_encrypted_secret_shares[0].clone(),
 //! #                                   bob_their_encrypted_secret_shares[0].clone(),
@@ -486,17 +507,16 @@
 //! let (claire, claire_dh_sk) = Participant::new_signer(&new_params, 3, "Φ");
 //! let (david, david_dh_sk) = Participant::new_signer(&new_params, 4, "Φ");
 //! 
-//! let mut signers: Vec<Participant> = vec!(alexis.clone(), barbara.clone(), claire.clone(), david.clone());
-//! let (alice_as_dealer, alice_encrypted_shares) =
-//!     Participant::reshare(&new_params, alice_secret_key, &mut signers, "Φ").or(Err(()))?;
+//! let signers: Vec<Participant> =
+//!     vec!(alexis.clone(), barbara.clone(), claire.clone(), david.clone());
+//! let (alice_as_dealer, alice_encrypted_shares, participant_lists) =
+//!     Participant::reshare(&new_params, alice_secret_key, &signers, "Φ").or(Err(()))?;
 //! 
-//! let mut signers: Vec<Participant> = vec!(alexis.clone(), barbara.clone(), claire.clone(), david.clone());
-//! let (bob_as_dealer, bob_encrypted_shares) =
-//!     Participant::reshare(&new_params, bob_secret_key, &mut signers, "Φ").or(Err(()))?;
+//! let (bob_as_dealer, bob_encrypted_shares, participant_lists) =
+//!     Participant::reshare(&new_params, bob_secret_key, &signers, "Φ").or(Err(()))?;
 //! 
-//! let mut signers: Vec<Participant> = vec!(alexis.clone(), barbara.clone(), claire.clone(), david.clone());
-//! let (carol_as_dealer, carol_encrypted_shares) =
-//!     Participant::reshare(&new_params, carol_secret_key, &mut signers, "Φ").or(Err(()))?;
+//! let (carol_as_dealer, carol_encrypted_shares, participant_lists) =
+//!     Participant::reshare(&new_params, carol_secret_key, &signers, "Φ").or(Err(()))?;
 //! # Ok(()) } fn main() { assert!(do_test().is_ok()); }
 //! ```
 //!
@@ -504,9 +524,9 @@
 //! generation protocol with respect to the previous set of dealers.
 //!
 //! ```rust
-//! # use frost_dalek::DistributedKeyGeneration;
-//! # use frost_dalek::Parameters;
-//! # use frost_dalek::Participant;
+//! # use ice_frost::DistributedKeyGeneration;
+//! # use ice_frost::Parameters;
+//! # use ice_frost::Participant;
 //! # use curve25519_dalek::ristretto::RistrettoPoint;
 //! # use curve25519_dalek::traits::Identity;
 //! # use curve25519_dalek::scalar::Scalar;
@@ -518,19 +538,17 @@
 //! # let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ");
 //! # let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ");
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let alice_state = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
-//! #                                                      &mut participants, "Φ").or(Err(()))?;
+//! # let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
+//! # let (alice_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
+//! #                                                      &participants, "Φ").or(Err(()))?;
 //! # let alice_their_encrypted_secret_shares = alice_state.their_encrypted_secret_shares()?;
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let bob_state = DistributedKeyGeneration::<_>::new_initial(&params, &bob_dh_sk, &bob.index, &bob_coefficients,
-//! #                                                    &mut participants, "Φ").or(Err(()))?;
+//! # let (bob_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &bob_dh_sk, &bob.index, &bob_coefficients,
+//! #                                                    &participants, "Φ").or(Err(()))?;
 //! # let bob_their_encrypted_secret_shares = bob_state.their_encrypted_secret_shares()?;
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let carol_state = DistributedKeyGeneration::<_>::new_initial(&params, &carol_dh_sk, &carol.index, &carol_coefficients,
-//! #                                                      &mut participants, "Φ").or(Err(()))?;
+//! # let (carol_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &carol_dh_sk, &carol.index, &carol_coefficients,
+//! #                                                      &participants, "Φ").or(Err(()))?;
 //! # let carol_their_encrypted_secret_shares = carol_state.their_encrypted_secret_shares()?;
 //! # let alice_my_encrypted_secret_shares = vec!(alice_their_encrypted_secret_shares[0].clone(),
 //! #                                   bob_their_encrypted_secret_shares[0].clone(),
@@ -561,31 +579,55 @@
 //! # let (claire, claire_dh_sk) = Participant::new_signer(&new_params, 3, "Φ");
 //! # let (david, david_dh_sk) = Participant::new_signer(&new_params, 4, "Φ");
 //! #
-//! # let mut signers: Vec<Participant> = vec!(alexis.clone(), barbara.clone(), claire.clone(), david.clone());
-//! # let (alice_as_dealer, alice_encrypted_shares) =
-//! #     Participant::reshare(&new_params, alice_secret_key, &mut signers, "Φ").or(Err(()))?;
-//! # let mut signers: Vec<Participant> = vec!(alexis.clone(), barbara.clone(), claire.clone(), david.clone());
-//! # let (bob_as_dealer, bob_encrypted_shares) =
-//! #     Participant::reshare(&new_params, bob_secret_key, &mut signers, "Φ").or(Err(()))?;
-//! # let mut signers: Vec<Participant> = vec!(alexis.clone(), barbara.clone(), claire.clone(), david.clone());
-//! # let (carol_as_dealer, carol_encrypted_shares) =
-//! #     Participant::reshare(&new_params, carol_secret_key, &mut signers, "Φ").or(Err(()))?;
+//! # let signers: Vec<Participant> = vec!(alexis.clone(), barbara.clone(), claire.clone(), david.clone());
+//! # let (alice_as_dealer, alice_encrypted_shares, participant_lists) =
+//! #     Participant::reshare(&new_params, alice_secret_key, &signers, "Φ").or(Err(()))?;
+//! # let (bob_as_dealer, bob_encrypted_shares, participant_lists) =
+//! #     Participant::reshare(&new_params, bob_secret_key, &signers, "Φ").or(Err(()))?;
+//! # let (carol_as_dealer, carol_encrypted_shares, participant_lists) =
+//! #     Participant::reshare(&new_params, carol_secret_key, &signers, "Φ").or(Err(()))?;
 //! #
-//! let mut dealers: Vec<Participant> = vec!(alice_as_dealer.clone(), bob_as_dealer.clone(), carol_as_dealer.clone());
-//! let alexis_state = DistributedKeyGeneration::<_>::new(&params, &alexis_dh_sk, &alexis.index,
-//!                                                    &mut dealers, "Φ").or(Err(()))?;
+//! let dealers: Vec<Participant> =
+//!     vec!(alice_as_dealer.clone(), bob_as_dealer.clone(), carol_as_dealer.clone());
+//! let (alexis_state, participant_lists) =
+//!     DistributedKeyGeneration::<_>::new(
+//!         &params,
+//!         &alexis_dh_sk,
+//!         &alexis.index,
+//!         &dealers,
+//!         "Φ",
+//!     )
+//!     .or(Err(()))?;
 //! 
-//! let mut dealers: Vec<Participant> = vec!(alice_as_dealer.clone(), bob_as_dealer.clone(), carol_as_dealer.clone());
-//! let barbara_state = DistributedKeyGeneration::<_>::new(&params, &barbara_dh_sk, &barbara.index,
-//!                                                    &mut dealers, "Φ").or(Err(()))?;
+//! let (barbara_state, participant_lists) =
+//!     DistributedKeyGeneration::<_>::new(
+//!         &params,
+//!         &barbara_dh_sk,
+//!         &barbara.index,
+//!         &dealers,
+//!         "Φ",
+//!     )
+//!     .or(Err(()))?;
 //! 
-//! let mut dealers: Vec<Participant> = vec!(alice_as_dealer.clone(), bob_as_dealer.clone(), carol_as_dealer.clone());
-//! let claire_state = DistributedKeyGeneration::<_>::new(&params, &claire_dh_sk, &claire.index,
-//!                                                      &mut dealers, "Φ").or(Err(()))?;
+//! let (claire_state, participant_lists) =
+//!     DistributedKeyGeneration::<_>::new(
+//!         &params,
+//!         &claire_dh_sk,
+//!         &claire.index,
+//!         &dealers,
+//!         "Φ",
+//!     )
+//!     .or(Err(()))?;
 //! 
-//! let mut dealers: Vec<Participant> = vec!(alice_as_dealer.clone(), bob_as_dealer.clone(), carol_as_dealer.clone());
-//! let david_state = DistributedKeyGeneration::<_>::new(&params, &david_dh_sk, &david.index,
-//!                                                      &mut dealers, "Φ").or(Err(()))?;
+//! let (david_state, participant_lists) =
+//!     DistributedKeyGeneration::<_>::new(
+//!         &params,
+//!         &david_dh_sk,
+//!         &david.index,
+//!         &dealers,
+//!         "Φ",
+//!     )
+//!     .or(Err(()))?;
 //! #
 //! # Ok(()) } fn main() { assert!(do_test().is_ok()); }
 //! ```
@@ -595,9 +637,9 @@
 //! distributed key resharing protocol.
 //!
 //! ```rust
-//! # use frost_dalek::DistributedKeyGeneration;
-//! # use frost_dalek::Parameters;
-//! # use frost_dalek::Participant;
+//! # use ice_frost::DistributedKeyGeneration;
+//! # use ice_frost::Parameters;
+//! # use ice_frost::Participant;
 //! # use curve25519_dalek::ristretto::RistrettoPoint;
 //! # use curve25519_dalek::traits::Identity;
 //! # use curve25519_dalek::scalar::Scalar;
@@ -609,19 +651,17 @@
 //! # let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ");
 //! # let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ");
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let alice_state = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
-//! #                                                      &mut participants, "Φ").or(Err(()))?;
+//! # let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
+//! # let (alice_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
+//! #                                                      &participants, "Φ").or(Err(()))?;
 //! # let alice_their_encrypted_secret_shares = alice_state.their_encrypted_secret_shares()?;
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let bob_state = DistributedKeyGeneration::<_>::new_initial(&params, &bob_dh_sk, &bob.index, &bob_coefficients,
-//! #                                                    &mut participants, "Φ").or(Err(()))?;
+//! # let (bob_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &bob_dh_sk, &bob.index, &bob_coefficients,
+//! #                                                    &participants, "Φ").or(Err(()))?;
 //! # let bob_their_encrypted_secret_shares = bob_state.their_encrypted_secret_shares()?;
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let carol_state = DistributedKeyGeneration::<_>::new_initial(&params, &carol_dh_sk, &carol.index, &carol_coefficients,
-//! #                                                      &mut participants, "Φ").or(Err(()))?;
+//! # let (carol_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &carol_dh_sk, &carol.index, &carol_coefficients,
+//! #                                                      &participants, "Φ").or(Err(()))?;
 //! # let carol_their_encrypted_secret_shares = carol_state.their_encrypted_secret_shares()?;
 //! # let alice_my_encrypted_secret_shares = vec!(alice_their_encrypted_secret_shares[0].clone(),
 //! #                                   bob_their_encrypted_secret_shares[0].clone(),
@@ -652,31 +692,27 @@
 //! # let (claire, claire_dh_sk) = Participant::new_signer(&new_params, 3, "Φ");
 //! # let (david, david_dh_sk) = Participant::new_signer(&new_params, 4, "Φ");
 //! #
-//! # let mut signers: Vec<Participant> = vec!(alexis.clone(), barbara.clone(), claire.clone(), david.clone());
-//! # let (alice_as_dealer, alice_encrypted_shares) =
-//! #     Participant::reshare(&new_params, alice_secret_key, &mut signers, "Φ").or(Err(()))?;
-//! # let mut signers: Vec<Participant> = vec!(alexis.clone(), barbara.clone(), claire.clone(), david.clone());
-//! # let (bob_as_dealer, bob_encrypted_shares) =
-//! #     Participant::reshare(&new_params, bob_secret_key, &mut signers, "Φ").or(Err(()))?;
-//! # let mut signers: Vec<Participant> = vec!(alexis.clone(), barbara.clone(), claire.clone(), david.clone());
-//! # let (carol_as_dealer, carol_encrypted_shares) =
-//! #     Participant::reshare(&new_params, carol_secret_key, &mut signers, "Φ").or(Err(()))?;
+//! # let signers: Vec<Participant> = vec!(alexis.clone(), barbara.clone(), claire.clone(), david.clone());
+//! # let (alice_as_dealer, alice_encrypted_shares, participant_lists) =
+//! #     Participant::reshare(&new_params, alice_secret_key, &signers, "Φ").or(Err(()))?;
+//! # let (bob_as_dealer, bob_encrypted_shares, participant_lists) =
+//! #     Participant::reshare(&new_params, bob_secret_key, &signers, "Φ").or(Err(()))?;
+//! # let (carol_as_dealer, carol_encrypted_shares, participant_lists) =
+//! #     Participant::reshare(&new_params, carol_secret_key, &signers, "Φ").or(Err(()))?;
 //! #
-//! # let mut dealers: Vec<Participant> = vec!(alice_as_dealer.clone(), bob_as_dealer.clone(), carol_as_dealer.clone());
-//! # let alexis_state = DistributedKeyGeneration::<_>::new(&params, &alexis_dh_sk, &alexis.index,
-//! #                                                    &mut dealers, "Φ").or(Err(()))?;
+//! # let dealers: Vec<Participant> =
+//! #     vec!(alice_as_dealer.clone(), bob_as_dealer.clone(), carol_as_dealer.clone());
+//! # let (alexis_state, participant_lists) = DistributedKeyGeneration::<_>::new(&params, &alexis_dh_sk, &alexis.index,
+//! #                                                    &dealers, "Φ").or(Err(()))?;
 //! #
-//! # let mut dealers: Vec<Participant> = vec!(alice_as_dealer.clone(), bob_as_dealer.clone(), carol_as_dealer.clone());
-//! # let barbara_state = DistributedKeyGeneration::<_>::new(&params, &barbara_dh_sk, &barbara.index,
-//! #                                                    &mut dealers, "Φ").or(Err(()))?;
+//! # let (barbara_state, participant_lists) = DistributedKeyGeneration::<_>::new(&params, &barbara_dh_sk, &barbara.index,
+//! #                                                    &dealers, "Φ").or(Err(()))?;
 //! #
-//! # let mut dealers: Vec<Participant> = vec!(alice_as_dealer.clone(), bob_as_dealer.clone(), carol_as_dealer.clone());
-//! # let claire_state = DistributedKeyGeneration::<_>::new(&params, &claire_dh_sk, &claire.index,
-//! #                                                      &mut dealers, "Φ").or(Err(()))?;
+//! # let (claire_state, participant_lists) = DistributedKeyGeneration::<_>::new(&params, &claire_dh_sk, &claire.index,
+//! #                                                      &dealers, "Φ").or(Err(()))?;
 //! #
-//! # let mut dealers: Vec<Participant> = vec!(alice_as_dealer.clone(), bob_as_dealer.clone(), carol_as_dealer.clone());
-//! # let david_state = DistributedKeyGeneration::<_>::new(&params, &david_dh_sk, &david.index,
-//! #                                                      &mut dealers, "Φ").or(Err(()))?;
+//! # let (david_state, participant_lists) = DistributedKeyGeneration::<_>::new(&params, &david_dh_sk, &david.index,
+//! #                                                      &dealers, "Φ").or(Err(()))?;
 //! #
 //! # let alexis_my_encrypted_secret_shares = vec!(alice_encrypted_shares[0].clone(),
 //! #                                   bob_encrypted_shares[0].clone(),
@@ -703,9 +739,9 @@
 //! and obtain their own long-lived, personal secret keys.
 //!
 //! ```rust
-//! # use frost_dalek::DistributedKeyGeneration;
-//! # use frost_dalek::Parameters;
-//! # use frost_dalek::Participant;
+//! # use ice_frost::DistributedKeyGeneration;
+//! # use ice_frost::Parameters;
+//! # use ice_frost::Participant;
 //! # use curve25519_dalek::ristretto::RistrettoPoint;
 //! # use curve25519_dalek::traits::Identity;
 //! # use curve25519_dalek::scalar::Scalar;
@@ -717,19 +753,17 @@
 //! # let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ");
 //! # let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ");
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let alice_state = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
-//! #                                                      &mut participants, "Φ").or(Err(()))?;
+//! # let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
+//! # let (alice_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
+//! #                                                      &participants, "Φ").or(Err(()))?;
 //! # let alice_their_encrypted_secret_shares = alice_state.their_encrypted_secret_shares()?;
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let bob_state = DistributedKeyGeneration::<_>::new_initial(&params, &bob_dh_sk, &bob.index, &bob_coefficients,
-//! #                                                    &mut participants, "Φ").or(Err(()))?;
+//! # let (bob_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &bob_dh_sk, &bob.index, &bob_coefficients,
+//! #                                                    &participants, "Φ").or(Err(()))?;
 //! # let bob_their_encrypted_secret_shares = bob_state.their_encrypted_secret_shares()?;
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let carol_state = DistributedKeyGeneration::<_>::new_initial(&params, &carol_dh_sk, &carol.index, &carol_coefficients,
-//! #                                                      &mut participants, "Φ").or(Err(()))?;
+//! # let (carol_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &carol_dh_sk, &carol.index, &carol_coefficients,
+//! #                                                      &participants, "Φ").or(Err(()))?;
 //! # let carol_their_encrypted_secret_shares = carol_state.their_encrypted_secret_shares()?;
 //! # let alice_my_encrypted_secret_shares = vec!(alice_their_encrypted_secret_shares[0].clone(),
 //! #                                   bob_their_encrypted_secret_shares[0].clone(),
@@ -759,31 +793,26 @@
 //! # let (claire, claire_dh_sk) = Participant::new_signer(&new_params, 3, "Φ");
 //! # let (david, david_dh_sk) = Participant::new_signer(&new_params, 4, "Φ");
 //! #
-//! # let mut signers: Vec<Participant> = vec!(alexis.clone(), barbara.clone(), claire.clone(), david.clone());
-//! # let (alice_as_dealer, alice_encrypted_shares) =
-//! #     Participant::reshare(&new_params, alice_secret_key, &mut signers, "Φ").or(Err(()))?;
-//! # let mut signers: Vec<Participant> = vec!(alexis.clone(), barbara.clone(), claire.clone(), david.clone());
-//! # let (bob_as_dealer, bob_encrypted_shares) =
-//! #     Participant::reshare(&new_params, bob_secret_key, &mut signers, "Φ").or(Err(()))?;
-//! # let mut signers: Vec<Participant> = vec!(alexis.clone(), barbara.clone(), claire.clone(), david.clone());
-//! # let (carol_as_dealer, carol_encrypted_shares) =
-//! #     Participant::reshare(&new_params, carol_secret_key, &mut signers, "Φ").or(Err(()))?;
+//! # let signers: Vec<Participant> = vec!(alexis.clone(), barbara.clone(), claire.clone(), david.clone());
+//! # let (alice_as_dealer, alice_encrypted_shares, participant_lists) =
+//! #     Participant::reshare(&new_params, alice_secret_key, &signers, "Φ").or(Err(()))?;
+//! # let (bob_as_dealer, bob_encrypted_shares, participant_lists) =
+//! #     Participant::reshare(&new_params, bob_secret_key, &signers, "Φ").or(Err(()))?;
+//! # let (carol_as_dealer, carol_encrypted_shares, participant_lists) =
+//! #     Participant::reshare(&new_params, carol_secret_key, &signers, "Φ").or(Err(()))?;
 //! #
-//! # let mut dealers: Vec<Participant> = vec!(alice_as_dealer.clone(), bob_as_dealer.clone(), carol_as_dealer.clone());
-//! # let alexis_state = DistributedKeyGeneration::<_>::new(&params, &alexis_dh_sk, &alexis.index,
-//! #                                                    &mut dealers, "Φ").or(Err(()))?;
+//! # let dealers: Vec<Participant> = vec!(alice_as_dealer.clone(), bob_as_dealer.clone(), carol_as_dealer.clone());
+//! # let (alexis_state, participant_lists) = DistributedKeyGeneration::<_>::new(&params, &alexis_dh_sk, &alexis.index,
+//! #                                                    &dealers, "Φ").or(Err(()))?;
 //! #
-//! # let mut dealers: Vec<Participant> = vec!(alice_as_dealer.clone(), bob_as_dealer.clone(), carol_as_dealer.clone());
-//! # let barbara_state = DistributedKeyGeneration::<_>::new(&params, &barbara_dh_sk, &barbara.index,
-//! #                                                    &mut dealers, "Φ").or(Err(()))?;
+//! # let (barbara_state, participant_lists) = DistributedKeyGeneration::<_>::new(&params, &barbara_dh_sk, &barbara.index,
+//! #                                                    &dealers, "Φ").or(Err(()))?;
 //! #
-//! # let mut dealers: Vec<Participant> = vec!(alice_as_dealer.clone(), bob_as_dealer.clone(), carol_as_dealer.clone());
-//! # let claire_state = DistributedKeyGeneration::<_>::new(&params, &claire_dh_sk, &claire.index,
-//! #                                                      &mut dealers, "Φ").or(Err(()))?;
+//! # let (claire_state, participant_lists) = DistributedKeyGeneration::<_>::new(&params, &claire_dh_sk, &claire.index,
+//! #                                                      &dealers, "Φ").or(Err(()))?;
 //! #
-//! # let mut dealers: Vec<Participant> = vec!(alice_as_dealer.clone(), bob_as_dealer.clone(), carol_as_dealer.clone());
-//! # let david_state = DistributedKeyGeneration::<_>::new(&params, &david_dh_sk, &david.index,
-//! #                                                      &mut dealers, "Φ").or(Err(()))?;
+//! # let (david_state, participant_lists) = DistributedKeyGeneration::<_>::new(&params, &david_dh_sk, &david.index,
+//! #                                                      &dealers, "Φ").or(Err(()))?;
 //! #
 //! # let alexis_my_encrypted_secret_shares = vec!(alice_encrypted_shares[0].clone(),
 //! #                                   bob_encrypted_shares[0].clone(),
@@ -842,19 +871,17 @@
 //! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ");
 //! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ");
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let alice_state = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
-//! #                                                      &mut participants, "Φ").or(Err(()))?;
+//! # let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
+//! # let (alice_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
+//! #                                                      &participants, "Φ").or(Err(()))?;
 //! # let alice_their_encrypted_secret_shares = alice_state.their_encrypted_secret_shares()?;
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let bob_state = DistributedKeyGeneration::<_>::new_initial(&params, &bob_dh_sk, &bob.index, &bob_coefficients,
-//! #                                                    &mut participants, "Φ").or(Err(()))?;
+//! # let (bob_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &bob_dh_sk, &bob.index, &bob_coefficients,
+//! #                                                    &participants, "Φ").or(Err(()))?;
 //! # let bob_their_encrypted_secret_shares = bob_state.their_encrypted_secret_shares()?;
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let carol_state = DistributedKeyGeneration::<_>::new_initial(&params, &carol_dh_sk, &carol.index, &carol_coefficients,
-//! #                                                      &mut participants, "Φ").or(Err(()))?;
+//! # let (carol_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &carol_dh_sk, &carol.index, &carol_coefficients,
+//! #                                                      &participants, "Φ").or(Err(()))?;
 //! # let carol_their_encrypted_secret_shares = carol_state.their_encrypted_secret_shares()?;
 //! # let alice_my_encrypted_secret_shares = vec!(alice_their_encrypted_secret_shares[0].clone(),
 //! #                                   bob_their_encrypted_secret_shares[0].clone(),
@@ -878,12 +905,16 @@
 //! # let bob_public_key = bob_secret_key.to_public();
 //! # let carol_public_key = carol_secret_key.to_public();
 //!
-//! let (alice_public_comshares, mut alice_secret_comshares) = generate_commitment_share_lists(&mut OsRng, 1, 1);
-//! let (bob_public_comshares, mut bob_secret_comshares) = generate_commitment_share_lists(&mut OsRng, 2, 1);
-//! let (carol_public_comshares, mut carol_secret_comshares) = generate_commitment_share_lists(&mut OsRng, 3, 1);
+//! let (alice_public_comshares, mut alice_secret_comshares) =
+//!     generate_commitment_share_lists(&mut OsRng, 1, 1);
+//! let (bob_public_comshares, mut bob_secret_comshares) =
+//!     generate_commitment_share_lists(&mut OsRng, 2, 1);
+//! let (carol_public_comshares, mut carol_secret_comshares) =
+//!     generate_commitment_share_lists(&mut OsRng, 3, 1);
 //!
-//! // Each application developer should choose a context string as unique to their usage as possible,
-//! // in order to provide domain separation from other applications which use FROST signatures.
+//! // Each application developer should choose a context string as unique
+//! // to their usage as possible, in order to provide domain separation
+//! // from other applications which use FROST signatures.
 //! let context = b"CONTEXT STRING STOLEN FROM DALEK TEST SUITE";
 //! let message = b"This is a test of the tsunami alert system. This is only a test.";
 //!
@@ -891,7 +922,13 @@
 //! // some additional context, such as public information about the run of the protocol.
 //! let message_hash = compute_message_hash(&context[..], &message[..]);
 //!
-//! let mut aggregator = SignatureAggregator::new(params, bob_group_key.clone(), &context[..], &message[..]);
+//! let mut aggregator =
+//!     SignatureAggregator::new(
+//!         params,
+//!         bob_group_key.clone(),
+//!         &context[..],
+//!         &message[..],
+//!     );
 //! # Ok(()) }
 //! # fn main() { assert!(do_test().is_ok()); }
 //! ```
@@ -920,19 +957,17 @@
 //! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ");
 //! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ");
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let alice_state = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
-//! #                                                      &mut participants, "Φ").or(Err(()))?;
+//! # let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
+//! # let (alice_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
+//! #                                                      &participants, "Φ").or(Err(()))?;
 //! # let alice_their_encrypted_secret_shares = alice_state.their_encrypted_secret_shares()?;
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let bob_state = DistributedKeyGeneration::<_>::new_initial(&params, &bob_dh_sk, &bob.index, &bob_coefficients,
-//! #                                                    &mut participants, "Φ").or(Err(()))?;
+//! # let (bob_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &bob_dh_sk, &bob.index, &bob_coefficients,
+//! #                                                    &participants, "Φ").or(Err(()))?;
 //! # let bob_their_encrypted_secret_shares = bob_state.their_encrypted_secret_shares()?;
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let carol_state = DistributedKeyGeneration::<_>::new_initial(&params, &carol_dh_sk, &carol.index, &carol_coefficients,
-//! #                                                      &mut participants, "Φ").or(Err(()))?;
+//! # let (carol_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &carol_dh_sk, &carol.index, &carol_coefficients,
+//! #                                                      &participants, "Φ").or(Err(()))?;
 //! # let carol_their_encrypted_secret_shares = carol_state.their_encrypted_secret_shares()?;
 //! # let alice_my_encrypted_secret_shares = vec!(alice_their_encrypted_secret_shares[0].clone(),
 //! #                                   bob_their_encrypted_secret_shares[0].clone(),
@@ -1001,19 +1036,17 @@
 //! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ");
 //! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ");
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let alice_state = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
-//! #                                                      &mut participants, "Φ").or(Err(""))?;
+//! # let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
+//! # let (alice_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
+//! #                                                      &participants, "Φ").or(Err(""))?;
 //! # let alice_their_encrypted_secret_shares = alice_state.their_encrypted_secret_shares().or(Err(""))?;
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let bob_state = DistributedKeyGeneration::<_>::new_initial(&params, &bob_dh_sk, &bob.index, &bob_coefficients,
-//! #                                                    &mut participants, "Φ").or(Err(""))?;
+//! # let (bob_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &bob_dh_sk, &bob.index, &bob_coefficients,
+//! #                                                    &participants, "Φ").or(Err(""))?;
 //! # let bob_their_encrypted_secret_shares = bob_state.their_encrypted_secret_shares().or(Err(""))?;
 //! #
-//! # let mut participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
-//! # let carol_state = DistributedKeyGeneration::<_>::new_initial(&params, &carol_dh_sk, &carol.index, &carol_coefficients,
-//! #                                                      &mut participants, "Φ").or(Err(""))?;
+//! # let (carol_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &carol_dh_sk, &carol.index, &carol_coefficients,
+//! #                                                      &participants, "Φ").or(Err(""))?;
 //! # let carol_their_encrypted_secret_shares = carol_state.their_encrypted_secret_shares().or(Err(""))?;
 //! # let alice_my_encrypted_secret_shares = vec!(alice_their_encrypted_secret_shares[0].clone(),
 //! #                                   bob_their_encrypted_secret_shares[0].clone(),
@@ -1118,6 +1151,8 @@ pub mod parameters;
 pub mod precomputation;
 pub mod nizk;
 pub mod signature;
+
+pub use keygen::Error;
 
 pub use keygen::DistributedKeyGeneration;
 pub use keygen::GroupKey;
