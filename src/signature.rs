@@ -16,11 +16,17 @@ use std::boxed::Box;
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
 
-use hashbrown::HashMap;
-use hashbrown::hash_map::Values;
-
 use core::cmp::Ordering;
 use core::convert::TryInto;
+
+#[cfg(feature = "std")]
+use std::collections::BTreeMap;
+#[cfg(feature = "alloc")]
+use alloc::collections::BTreeMap;
+#[cfg(feature = "std")]
+use std::collections::btree_map::Values;
+#[cfg(feature = "alloc")]
+use alloc::collections::btree_map::Values;
 
 #[cfg(feature = "std")]
 use std::vec::Vec;
@@ -152,7 +158,7 @@ macro_rules! impl_indexed_hashmap {
 
 impl $type {
     pub(crate) fn new() -> $type {
-        $type(HashMap::new())
+        $type(BTreeMap::new())
     }
 
     // [CFRG] Since the sorting order matters for the public API, both it
@@ -192,21 +198,21 @@ impl $type {
 // XXX TODO there might be a more efficient way to optimise this data structure
 //     and its algorithms?
 #[derive(Debug)]
-struct SignerRs(pub(crate) HashMap<[u8; 4], RistrettoPoint>);
+struct SignerRs(pub(crate) BTreeMap<[u8; 4], RistrettoPoint>);
 
 impl_indexed_hashmap!(Type = SignerRs, Item = RistrettoPoint);
 
 /// A type for storing signers' partial threshold signatures along with the
 /// respective signer participant index.
 #[derive(Debug)]
-pub(crate) struct PartialThresholdSignatures(pub(crate) HashMap<[u8; 4], Scalar>);
+pub(crate) struct PartialThresholdSignatures(pub(crate) BTreeMap<[u8; 4], Scalar>);
 
 impl_indexed_hashmap!(Type = PartialThresholdSignatures, Item = Scalar);
 
 /// A type for storing signers' individual public keys along with the respective
 /// signer participant index.
 #[derive(Debug)]
-pub(crate) struct IndividualPublicKeys(pub(crate) HashMap<[u8; 4], RistrettoPoint>);
+pub(crate) struct IndividualPublicKeys(pub(crate) BTreeMap<[u8; 4], RistrettoPoint>);
 
 impl_indexed_hashmap!(Type = IndividualPublicKeys, Item = RistrettoPoint);
 
@@ -226,9 +232,9 @@ pub fn compute_message_hash(context_string: &[u8], message: &[u8]) -> [u8; 64] {
 fn compute_binding_factors_and_group_commitment(
     message_hash: &[u8; 64],
     signers: &[Signer],
-) -> (HashMap<u32, Scalar>, SignerRs)
+) -> (BTreeMap<u32, Scalar>, SignerRs)
 {
-	let mut binding_factors: HashMap<u32, Scalar> = HashMap::with_capacity(signers.len());
+	let mut binding_factors: BTreeMap<u32, Scalar> = BTreeMap::new();
     let mut Rs: SignerRs = SignerRs::new();
 
     // [CFRG] Should the hash function be hardcoded in the RFC or should
@@ -562,14 +568,14 @@ impl SignatureAggregator<Initial<'_>> {
     /// # Returns
     ///
     /// A Result whose Ok() value is a finalized aggregator, otherwise a
-    /// `Hashmap<u32, &'static str>` containing the participant indices of the misbehaving
+    /// `BTreeMap<u32, &'static str>` containing the participant indices of the misbehaving
     /// signers and a description of their misbehaviour.
     ///
-    /// If the `Hashmap` contains a key for `0`, this indicates that
+    /// If the `BTreeMap` contains a key for `0`, this indicates that
     /// the aggregator did not have \(( t' \)) partial signers
     /// s.t. \(( t \le t' \le n \)).
-    pub fn finalize(mut self) -> Result<SignatureAggregator<Finalized>, HashMap<u32, &'static str>> {
-        let mut misbehaving_participants: HashMap<u32, &'static str> = HashMap::new();
+    pub fn finalize(mut self) -> Result<SignatureAggregator<Finalized>, BTreeMap<u32, &'static str>> {
+        let mut misbehaving_participants: BTreeMap<u32, &'static str> = BTreeMap::new();
         let remaining_signers = self.get_remaining_signers();
 
         // [DIFFERENT_TO_PAPER] We're reporting missing partial signatures which
@@ -610,10 +616,10 @@ impl SignatureAggregator<Finalized> {
     /// # Returns
     ///
     /// A Result whose Ok() value is a [`ThresholdSignature`], otherwise a
-    /// `Hashmap<u32, &'static str>` containing the participant indices of the misbehaving
+    /// `BTreeMap<u32, &'static str>` containing the participant indices of the misbehaving
     /// signers and a description of their misbehaviour.
-    pub fn aggregate(&self) -> Result<ThresholdSignature, HashMap<u32, &'static str>> {
-        let mut misbehaving_participants: HashMap<u32, &'static str> = HashMap::new();
+    pub fn aggregate(&self) -> Result<ThresholdSignature, BTreeMap<u32, &'static str>> {
+        let mut misbehaving_participants: BTreeMap<u32, &'static str> = BTreeMap::new();
         
         let (_, Rs) = compute_binding_factors_and_group_commitment(&self.aggregator.message_hash, &self.state.signers);
         let R: RistrettoPoint = Rs.values().sum();
