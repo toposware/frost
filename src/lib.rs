@@ -1,6 +1,6 @@
 // -*- mode: rust; -*-
 //
-// This file is part of ed25519-dalek.
+// This file is part of ice-frost.
 // Copyright (c) 2017-2019 isis lovecruft
 // Copyright (c) 2021 Toposware Inc.
 // See LICENSE for licensing information.
@@ -9,7 +9,7 @@
 // - isis agora lovecruft <isis@patternsinthevoid.net>
 // - Toposware developers <dev@toposware.com>
 
-//! A Rust implementation of **[FROST]**: **F**lexible **R**ound-**O**ptimised **S**chnorr **T**hreshold signatures.
+//! A Rust implementation of **[ICE-FROST]**: **I**dentifiable **C**heating **E**ntity **F**lexible **R**ound-**O**ptimised **S**chnorr **T**hreshold signatures.
 //!
 //! Threshold signatures are a cryptographic construction wherein a subset, \\( t \\),
 //! of a group of \\( n \\) signers can produce a valid signature.  For example, if
@@ -27,6 +27,7 @@
 //! [here](signature/index.html).
 //!
 //! [FROST]: https://eprint.iacr.org/2020/852
+//! [ICE-FROST]: https://eprint.iacr.org/2021/1658
 //! [various]: https://eprint.iacr.org/2018/417
 //! [cryptographic]: https://eprint.iacr.org/2020/945
 //! [attacks]: https://www.researchgate.net/profile/Claus_Schnorr/publication/2900710_Security_of_Blind_Discrete_Log_Signatures_against_Interactive_Attacks/links/54231e540cf26120b7a6bb47.pdf
