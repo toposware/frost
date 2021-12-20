@@ -2,10 +2,12 @@
 //
 // This file is part of dalek-frost.
 // Copyright (c) 2020 isis lovecruft
+// Copyright (c) 2021 Toposware Inc.
 // See LICENSE for licensing information.
 //
 // Authors:
 // - isis agora lovecruft <isis@patternsinthevoid.net>
+// - Toposware developers <dev@toposware.com>
 
 //! Benchmarks for FROST.
 

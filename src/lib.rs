@@ -2,10 +2,12 @@
 //
 // This file is part of ed25519-dalek.
 // Copyright (c) 2017-2019 isis lovecruft
+// Copyright (c) 2021 Toposware Inc.
 // See LICENSE for licensing information.
 //
 // Authors:
 // - isis agora lovecruft <isis@patternsinthevoid.net>
+// - Toposware developers <dev@toposware.com>
 
 //! A Rust implementation of **[FROST]**: **F**lexible **R**ound-**O**ptimised **S**chnorr **T**hreshold signatures.
 //!
