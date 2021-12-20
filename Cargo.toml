@@ -9,10 +9,9 @@ edition = "2018"
 description = "ICE-FROST: Identifiable Cheating Entity Flexible Round-Optimised Threshold Signature using the Ristretto group"
 readme = "README.md"
 license = "BSD-3-Clause"
-repository = "https://github.com/isislovecruft/frost-dalek"
-homepage = "https://dalek.rs"
-documentation = "https://docs.rs/frost-dalek"
-keywords = ["cryptography", "frost", "ristretto", "signature", "threshold-signature"]
+repository = "https://github.com/Toposware/frost"
+homepage = "https://github.com/ToposWare/frost"
+keywords = ["cryptography", "frost", "ice-frost", "ristretto", "signature", "threshold-signature"]
 categories = ["cryptography"]
 exclude = [ ".gitignore" ]
 
