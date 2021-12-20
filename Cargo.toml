@@ -1,9 +1,12 @@
 [package]
-name = "frost-dalek"
-version = "0.2.3"
-authors = ["isis lovecruft <isis@patternsinthevoid.net>"]
+name = "ice-frost"
+version = "0.1.0"
+authors = [
+    "isis lovecruft <isis@patternsinthevoid.net>",
+    "Toposware Developers <dev@toposware.com>"
+]
 edition = "2018"
-description = "FROST: Flexible Round-Optimised Threshold Signature using the Ristretto group"
+description = "ICE-FROST: Identifiable Cheating Entity Flexible Round-Optimised Threshold Signature using the Ristretto group"
 readme = "README.md"
 license = "BSD-3-Clause"
 repository = "https://github.com/isislovecruft/frost-dalek"

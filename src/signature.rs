@@ -1,6 +1,6 @@
 // -*- mode: rust; -*-
 //
-// This file is part of dalek-frost.
+// This file is part of ice-frost.
 // Copyright (c) 2020 isis lovecruft
 // Copyright (c) 2021 Toposware Inc.
 // See LICENSE for licensing information.

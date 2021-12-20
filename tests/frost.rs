@@ -1,6 +1,6 @@
 // -*- mode: rust; -*-
 //
-// This file is part of dalek-frost.
+// This file is part of ice-frost.
 // Copyright (c) 2020 isis lovecruft
 // Copyright (c) 2021 Toposware Inc.
 // See LICENSE for licensing information.
@@ -15,14 +15,14 @@ use ed25519_dalek::Verifier;
 
 use rand::rngs::OsRng;
 
-use frost_dalek::compute_message_hash;
-use frost_dalek::generate_commitment_share_lists;
+use ice_frost::compute_message_hash;
+use ice_frost::generate_commitment_share_lists;
 
-use frost_dalek::DistributedKeyGeneration;
-use frost_dalek::Parameters;
-use frost_dalek::Participant;
+use ice_frost::DistributedKeyGeneration;
+use ice_frost::Parameters;
+use ice_frost::Participant;
 
-use frost_dalek::SignatureAggregator;
+use ice_frost::SignatureAggregator;
 
 #[test]
 fn signing_and_verification_3_out_of_5() {
