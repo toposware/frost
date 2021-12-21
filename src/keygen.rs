@@ -1,6 +1,6 @@
 // -*- mode: rust; -*-
 //
-// This file is part of dalek-frost.
+// This file is part of ice-frost.
 // Copyright (c) 2020 isis lovecruft
 // Copyright (c) 2021 Toposware Inc.
 // See LICENSE for licensing information.
@@ -64,9 +64,9 @@
 //! # Examples
 //!
 //! ```rust
-//! use frost_dalek::DistributedKeyGeneration;
-//! use frost_dalek::Parameters;
-//! use frost_dalek::Participant;
+//! use ice_frost::DistributedKeyGeneration;
+//! use ice_frost::Parameters;
+//! use ice_frost::Participant;
 //! use curve25519_dalek::ristretto::RistrettoPoint;
 //! use curve25519_dalek::traits::Identity;
 //! use curve25519_dalek::scalar::Scalar;

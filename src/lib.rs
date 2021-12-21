@@ -1,6 +1,6 @@
 // -*- mode: rust; -*-
 //
-// This file is part of ed25519-dalek.
+// This file is part of ice-frost.
 // Copyright (c) 2017-2019 isis lovecruft
 // Copyright (c) 2021 Toposware Inc.
 // See LICENSE for licensing information.
@@ -9,7 +9,7 @@
 // - isis agora lovecruft <isis@patternsinthevoid.net>
 // - Toposware developers <dev@toposware.com>
 
-//! A Rust implementation of **[FROST]**: **F**lexible **R**ound-**O**ptimised **S**chnorr **T**hreshold signatures.
+//! A Rust implementation of **[ICE-FROST]**: **I**dentifiable **C**heating **E**ntity **F**lexible **R**ound-**O**ptimised **S**chnorr **T**hreshold signatures.
 //!
 //! Threshold signatures are a cryptographic construction wherein a subset, \\( t \\),
 //! of a group of \\( n \\) signers can produce a valid signature.  For example, if
@@ -27,6 +27,7 @@
 //! [here](signature/index.html).
 //!
 //! [FROST]: https://eprint.iacr.org/2020/852
+//! [ICE-FROST]: https://eprint.iacr.org/2021/1658
 //! [various]: https://eprint.iacr.org/2018/417
 //! [cryptographic]: https://eprint.iacr.org/2020/945
 //! [attacks]: https://www.researchgate.net/profile/Claus_Schnorr/publication/2900710_Security_of_Blind_Discrete_Log_Signatures_against_Interactive_Attacks/links/54231e540cf26120b7a6bb47.pdf
@@ -39,7 +40,7 @@
 //! signature.
 //!
 //! ```rust
-//! use frost_dalek::Parameters;
+//! use ice_frost::Parameters;
 //!
 //! let params = Parameters { t: 2, n: 3 };
 //! ```
@@ -54,8 +55,8 @@
 //! `3` in the following examples).
 //! 
 //! ```rust
-//! # use frost_dalek::Parameters;
-//! # use frost_dalek::Participant;
+//! # use ice_frost::Parameters;
+//! # use ice_frost::Participant;
 //! # use curve25519_dalek::ristretto::RistrettoPoint;
 //! # use curve25519_dalek::traits::Identity;
 //! #
@@ -85,8 +86,8 @@
 //! Bob and Carol verify Alice's zero-knowledge proof by doing:
 //!
 //! ```rust
-//! # use frost_dalek::Parameters;
-//! # use frost_dalek::Participant;
+//! # use ice_frost::Parameters;
+//! # use ice_frost::Participant;
 //! # use curve25519_dalek::ristretto::RistrettoPoint;
 //! # use curve25519_dalek::traits::Identity;
 //! #
@@ -104,8 +105,8 @@
 //! Similarly, Alice and Carol verify Bob's proof:
 //!
 //! ```rust
-//! # use frost_dalek::Parameters;
-//! # use frost_dalek::Participant;
+//! # use ice_frost::Parameters;
+//! # use ice_frost::Participant;
 //! # use curve25519_dalek::ristretto::RistrettoPoint;
 //! # use curve25519_dalek::traits::Identity;
 //! #
@@ -123,8 +124,8 @@
 //! And, again, Alice and Bob verify Carol's proof:
 //!
 //! ```rust
-//! # use frost_dalek::Parameters;
-//! # use frost_dalek::Participant;
+//! # use ice_frost::Parameters;
+//! # use ice_frost::Participant;
 //! # use curve25519_dalek::ristretto::RistrettoPoint;
 //! # use curve25519_dalek::traits::Identity;
 //! #
@@ -142,9 +143,9 @@
 //! Alice enters round one of the distributed key generation protocol:
 //!
 //! ```rust
-//! use frost_dalek::DistributedKeyGeneration;
-//! # use frost_dalek::Parameters;
-//! # use frost_dalek::Participant;
+//! use ice_frost::DistributedKeyGeneration;
+//! # use ice_frost::Parameters;
+//! # use ice_frost::Participant;
 //! # use curve25519_dalek::ristretto::RistrettoPoint;
 //! # use curve25519_dalek::traits::Identity;
 //! # use curve25519_dalek::scalar::Scalar;
@@ -165,9 +166,9 @@
 //! Alice then collects the secret shares which they send to the other participants:
 //!
 //! ```rust
-//! # use frost_dalek::DistributedKeyGeneration;
-//! # use frost_dalek::Parameters;
-//! # use frost_dalek::Participant;
+//! # use ice_frost::DistributedKeyGeneration;
+//! # use ice_frost::Parameters;
+//! # use ice_frost::Participant;
 //! # use curve25519_dalek::ristretto::RistrettoPoint;
 //! # use curve25519_dalek::traits::Identity;
 //! # use curve25519_dalek::scalar::Scalar;
@@ -192,9 +193,9 @@
 //! Bob and Carol each do the same:
 //!
 //! ```rust
-//! # use frost_dalek::DistributedKeyGeneration;
-//! # use frost_dalek::Parameters;
-//! # use frost_dalek::Participant;
+//! # use ice_frost::DistributedKeyGeneration;
+//! # use ice_frost::Parameters;
+//! # use ice_frost::Participant;
 //! # use curve25519_dalek::ristretto::RistrettoPoint;
 //! # use curve25519_dalek::traits::Identity;
 //! # use curve25519_dalek::scalar::Scalar;
@@ -231,9 +232,9 @@
 //! and
 //!
 //! ```rust
-//! # use frost_dalek::DistributedKeyGeneration;
-//! # use frost_dalek::Parameters;
-//! # use frost_dalek::Participant;
+//! # use ice_frost::DistributedKeyGeneration;
+//! # use ice_frost::Parameters;
+//! # use ice_frost::Participant;
 //! # use curve25519_dalek::ristretto::RistrettoPoint;
 //! # use curve25519_dalek::traits::Identity;
 //! # use curve25519_dalek::scalar::Scalar;
@@ -270,9 +271,9 @@
 //! Each participant now has a vector of secret shares given to them by the other participants:
 //!
 //! ```rust
-//! # use frost_dalek::DistributedKeyGeneration;
-//! # use frost_dalek::Parameters;
-//! # use frost_dalek::Participant;
+//! # use ice_frost::DistributedKeyGeneration;
+//! # use ice_frost::Parameters;
+//! # use ice_frost::Participant;
 //! # use curve25519_dalek::ristretto::RistrettoPoint;
 //! # use curve25519_dalek::traits::Identity;
 //! # use curve25519_dalek::scalar::Scalar;
@@ -311,9 +312,9 @@
 //! round two of the distributed key generation protocol.
 //!
 //! ```rust
-//! # use frost_dalek::DistributedKeyGeneration;
-//! # use frost_dalek::Parameters;
-//! # use frost_dalek::Participant;
+//! # use ice_frost::DistributedKeyGeneration;
+//! # use ice_frost::Parameters;
+//! # use ice_frost::Participant;
 //! # use curve25519_dalek::ristretto::RistrettoPoint;
 //! # use curve25519_dalek::traits::Identity;
 //! # use curve25519_dalek::scalar::Scalar;
@@ -357,9 +358,9 @@
 //! also derive their [`IndividualPublicKey`]s from their [`IndividualSecretKey`]s.
 //!
 //! ```rust
-//! # use frost_dalek::DistributedKeyGeneration;
-//! # use frost_dalek::Parameters;
-//! # use frost_dalek::Participant;
+//! # use ice_frost::DistributedKeyGeneration;
+//! # use ice_frost::Parameters;
+//! # use ice_frost::Participant;
 //! # use curve25519_dalek::ristretto::RistrettoPoint;
 //! # use curve25519_dalek::traits::Identity;
 //! # use curve25519_dalek::scalar::Scalar;
@@ -418,15 +419,15 @@
 //! [`generate_commitment_share_lists`]) and publish a list of commitment shares.
 //!
 //! ```rust
-//! use frost_dalek::compute_message_hash;
-//! use frost_dalek::generate_commitment_share_lists;
-//! # use frost_dalek::DistributedKeyGeneration;
-//! # use frost_dalek::Parameters;
-//! # use frost_dalek::Participant;
+//! use ice_frost::compute_message_hash;
+//! use ice_frost::generate_commitment_share_lists;
+//! # use ice_frost::DistributedKeyGeneration;
+//! # use ice_frost::Parameters;
+//! # use ice_frost::Participant;
 //! # use curve25519_dalek::ristretto::RistrettoPoint;
 //! # use curve25519_dalek::traits::Identity;
 //! # use curve25519_dalek::scalar::Scalar;
-//! use frost_dalek::SignatureAggregator;
+//! use ice_frost::SignatureAggregator;
 //!
 //! use rand::rngs::OsRng;
 //! # fn do_test() -> Result<(), ()> {
@@ -491,16 +492,16 @@
 //! we'll have Alice and Carol sign.
 //!
 //! ```rust
-//! # use frost_dalek::compute_message_hash;
-//! # use frost_dalek::generate_commitment_share_lists;
-//! # use frost_dalek::DistributedKeyGeneration;
-//! # use frost_dalek::IndividualPublicKey;
-//! # use frost_dalek::Parameters;
-//! # use frost_dalek::Participant;
+//! # use ice_frost::compute_message_hash;
+//! # use ice_frost::generate_commitment_share_lists;
+//! # use ice_frost::DistributedKeyGeneration;
+//! # use ice_frost::IndividualPublicKey;
+//! # use ice_frost::Parameters;
+//! # use ice_frost::Participant;
 //! # use curve25519_dalek::ristretto::RistrettoPoint;
 //! # use curve25519_dalek::traits::Identity;
 //! # use curve25519_dalek::scalar::Scalar;
-//! # use frost_dalek::SignatureAggregator;
+//! # use ice_frost::SignatureAggregator;
 //! #
 //! # use rand::rngs::OsRng;
 //! #
@@ -570,15 +571,15 @@
 //! Alice and Carol each then compute their partial signatures, and send these to the signature aggregator.
 //!
 //! ```rust
-//! # use frost_dalek::compute_message_hash;
-//! # use frost_dalek::generate_commitment_share_lists;
-//! # use frost_dalek::DistributedKeyGeneration;
-//! # use frost_dalek::Parameters;
-//! # use frost_dalek::Participant;
+//! # use ice_frost::compute_message_hash;
+//! # use ice_frost::generate_commitment_share_lists;
+//! # use ice_frost::DistributedKeyGeneration;
+//! # use ice_frost::Parameters;
+//! # use ice_frost::Participant;
 //! # use curve25519_dalek::ristretto::RistrettoPoint;
 //! # use curve25519_dalek::traits::Identity;
 //! # use curve25519_dalek::scalar::Scalar;
-//! # use frost_dalek::SignatureAggregator;
+//! # use ice_frost::SignatureAggregator;
 //! #
 //! # use rand::rngs::OsRng;
 //! #
