@@ -662,13 +662,13 @@
 //! ```
 //!
 //! If the aggregator could not finalize the state, then the `.finalize()` method
-//! will return a `HashMap<u32, &'static str>` describing participant indices and the issues
+//! will return a `BTreeMap<u32, &'static str>` describing participant indices and the issues
 //! encountered for them.  These issues are **guaranteed to be the fault of the aggregator**,
 //! e.g. not collecting all the expected partial signatures, accepting two partial
 //! signatures from the same participant, etc.
 //!
 //! And the same for the actual aggregation, if there was an error then a
-//! `HashMap<u32, &'static str>` will be returned which maps participant indices to issues.
+//! `BTreeMap<u32, &'static str>` will be returned which maps participant indices to issues.
 //! Unlike before, however, these issues are guaranteed to be the fault of the
 //! corresponding participant, specifically, that their partial signature was invalid.
 //!
