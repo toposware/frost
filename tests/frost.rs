@@ -28,81 +28,82 @@ use ice_frost::SignatureAggregator;
 fn signing_and_verification_3_out_of_5() {
     let params = Parameters { n: 5, t: 3 };
 
-    let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, 1, "Φ");
-    let (p2, p2coeffs, p2_dh_sk) = Participant::new(&params, 2, "Φ");
-    let (p3, p3coeffs, p3_dh_sk) = Participant::new(&params, 3, "Φ");
-    let (p4, p4coeffs, p4_dh_sk) = Participant::new(&params, 4, "Φ");
-    let (p5, p5coeffs, p5_dh_sk) = Participant::new(&params, 5, "Φ");
+    let (p1, p1coeffs, p1_dh_sk) = Participant::new_dealer(&params, 1, "Φ");
+    let (p2, p2coeffs, p2_dh_sk) = Participant::new_dealer(&params, 2, "Φ");
+    let (p3, p3coeffs, p3_dh_sk) = Participant::new_dealer(&params, 3, "Φ");
+    let (p4, p4coeffs, p4_dh_sk) = Participant::new_dealer(&params, 4, "Φ");
+    let (p5, p5coeffs, p5_dh_sk) = Participant::new_dealer(&params, 5, "Φ");
 
-    let mut p1_other_participants: Vec<Participant> = vec!(p2.clone(), p3.clone(), p4.clone(), p5.clone());
-    let p1_state = DistributedKeyGeneration::<_>::new(&params,
-                                                      &p1_dh_sk,
-                                                      &p1.index,
-                                                      &p1coeffs,
-                                                      &mut p1_other_participants,
-                                                      "Φ").unwrap();
+    let participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p3.clone(), p4.clone(), p5.clone());
+    let (p1_state, _participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params,
+                                                             &p1_dh_sk,
+                                                             &p1.index,
+                                                             &p1coeffs,
+                                                             &participants,
+                                                             "Φ").unwrap();
     let p1_their_encrypted_secret_shares = p1_state.their_encrypted_secret_shares().unwrap();
 
-    let mut p2_other_participants: Vec<Participant> = vec!(p1.clone(), p3.clone(), p4.clone(), p5.clone());
-    let p2_state = DistributedKeyGeneration::<>::new(&params,
-                                                     &p2_dh_sk,
-                                                     &p2.index,
-                                                     &p2coeffs,
-                                                     &mut p2_other_participants,
-                                                     "Φ").unwrap();
+    let (p2_state, _participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params,
+                                                             &p2_dh_sk,
+                                                             &p2.index,
+                                                             &p2coeffs,
+                                                             &participants,
+                                                             "Φ").unwrap();
     let p2_their_encrypted_secret_shares = p2_state.their_encrypted_secret_shares().unwrap();
 
-    let mut p3_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p4.clone(), p5.clone());
-    let p3_state = DistributedKeyGeneration::<_>::new(&params,
-                                                      &p3_dh_sk,
-                                                      &p3.index,
-                                                      &p3coeffs,
-                                                      &mut p3_other_participants,
-                                                      "Φ").unwrap();
+    let (p3_state, _participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params,
+                                                             &p3_dh_sk,
+                                                             &p3.index,
+                                                             &p3coeffs,
+                                                             &participants,
+                                                             "Φ").unwrap();
     let p3_their_encrypted_secret_shares = p3_state.their_encrypted_secret_shares().unwrap();
 
-    let mut p4_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p3.clone(), p5.clone());
-    let p4_state = DistributedKeyGeneration::<_>::new(&params,
-                                                      &p4_dh_sk,
-                                                      &p4.index,
-                                                      &p4coeffs,
-                                                      &mut p4_other_participants,
-                                                      "Φ").unwrap();
+    let (p4_state, _participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params,
+                                                             &p4_dh_sk,
+                                                             &p4.index,
+                                                             &p4coeffs,
+                                                             &participants,
+                                                             "Φ").unwrap();
     let p4_their_encrypted_secret_shares = p4_state.their_encrypted_secret_shares().unwrap();
 
-    let mut p5_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p3.clone(), p4.clone());
-    let p5_state = DistributedKeyGeneration::<_>::new(&params,
-                                                      &p5_dh_sk,
-                                                      &p5.index,
-                                                      &p5coeffs,
-                                                      &mut p5_other_participants,
-                                                      "Φ").unwrap();
+    let (p5_state, _participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params,
+                                                             &p5_dh_sk,
+                                                             &p5.index,
+                                                             &p5coeffs,
+                                                             &participants,
+                                                             "Φ").unwrap();
     let p5_their_encrypted_secret_shares = p5_state.their_encrypted_secret_shares().unwrap();
 
-    let p1_my_encrypted_secret_shares = vec!(p2_their_encrypted_secret_shares[0].clone(), // XXX FIXME indexing
+    let p1_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[0].clone(),
+                                   p2_their_encrypted_secret_shares[0].clone(),
                                    p3_their_encrypted_secret_shares[0].clone(),
                                    p4_their_encrypted_secret_shares[0].clone(),
                                    p5_their_encrypted_secret_shares[0].clone());
 
-    let p2_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[0].clone(),
+    let p2_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[1].clone(),
+                                   p2_their_encrypted_secret_shares[1].clone(),
                                    p3_their_encrypted_secret_shares[1].clone(),
                                    p4_their_encrypted_secret_shares[1].clone(),
                                    p5_their_encrypted_secret_shares[1].clone());
 
-    let p3_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[1].clone(),
-                                   p2_their_encrypted_secret_shares[1].clone(),
+    let p3_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[2].clone(),
+                                   p2_their_encrypted_secret_shares[2].clone(),
+                                   p3_their_encrypted_secret_shares[2].clone(),
                                    p4_their_encrypted_secret_shares[2].clone(),
                                    p5_their_encrypted_secret_shares[2].clone());
 
-    let p4_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[2].clone(),
-                                   p2_their_encrypted_secret_shares[2].clone(),
-                                   p3_their_encrypted_secret_shares[2].clone(),
-                                   p5_their_encrypted_secret_shares[3].clone());
-
-    let p5_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[3].clone(),
+    let p4_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[3].clone(),
                                    p2_their_encrypted_secret_shares[3].clone(),
                                    p3_their_encrypted_secret_shares[3].clone(),
-                                   p4_their_encrypted_secret_shares[3].clone());
+                                   p4_their_encrypted_secret_shares[3].clone(),
+                                   p5_their_encrypted_secret_shares[3].clone());
+
+    let p5_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[4].clone(),
+                                   p2_their_encrypted_secret_shares[4].clone(),
+                                   p3_their_encrypted_secret_shares[4].clone(),
+                                   p4_their_encrypted_secret_shares[4].clone(),
+                                   p5_their_encrypted_secret_shares[4].clone());
 
     let p1_state = p1_state.to_round_two(p1_my_encrypted_secret_shares).unwrap();
     let p2_state = p2_state.to_round_two(p2_my_encrypted_secret_shares).unwrap();
@@ -110,11 +111,11 @@ fn signing_and_verification_3_out_of_5() {
     let p4_state = p4_state.to_round_two(p4_my_encrypted_secret_shares).unwrap();
     let p5_state = p5_state.to_round_two(p5_my_encrypted_secret_shares).unwrap();
 
-    let (group_key, p1_sk) = p1_state.finish(p1.public_key().unwrap()).unwrap();
-    let (_, _) = p2_state.finish(p2.public_key().unwrap()).unwrap();
-    let (_, p3_sk) = p3_state.finish(p3.public_key().unwrap()).unwrap();
-    let (_, p4_sk) = p4_state.finish(p4.public_key().unwrap()).unwrap();
-    let (_, _) = p5_state.finish(p5.public_key().unwrap()).unwrap();
+    let (group_key, p1_sk) = p1_state.finish().unwrap();
+    let (_, _) = p2_state.finish().unwrap();
+    let (_, p3_sk) = p3_state.finish().unwrap();
+    let (_, p4_sk) = p4_state.finish().unwrap();
+    let (_, _) = p5_state.finish().unwrap();
 
     let context = b"CONTEXT STRING STOLEN FROM DALEK TEST SUITE";
     let message = b"This is a test of the tsunami alert system. This is only a test.";
@@ -151,53 +152,54 @@ fn signing_and_verification_3_out_of_5() {
 fn signing_and_verification_with_ed25519_dalek_2_out_of_3() {
     let params = Parameters { n: 3, t: 2 };
 
-    let (p1, p1coeffs, p1_dh_sk) = Participant::new(&params, 1, "Φ");
-    let (p2, p2coeffs, p2_dh_sk) = Participant::new(&params, 2, "Φ");
-    let (p3, p3coeffs, p3_dh_sk) = Participant::new(&params, 3, "Φ");
+    let (p1, p1coeffs, p1_dh_sk) = Participant::new_dealer(&params, 1, "Φ");
+    let (p2, p2coeffs, p2_dh_sk) = Participant::new_dealer(&params, 2, "Φ");
+    let (p3, p3coeffs, p3_dh_sk) = Participant::new_dealer(&params, 3, "Φ");
 
-    let mut p1_other_participants: Vec<Participant> = vec!(p2.clone(), p3.clone());
-    let p1_state = DistributedKeyGeneration::<_>::new(&params,
+    let participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p3.clone());
+    let (p1_state, _participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params,
                                                       &p1_dh_sk,
                                                       &p1.index,
                                                       &p1coeffs,
-                                                      &mut p1_other_participants,
+                                                      &participants,
                                                       "Φ").unwrap();
     let p1_their_encrypted_secret_shares = p1_state.their_encrypted_secret_shares().unwrap();
 
-    let mut p2_other_participants: Vec<Participant> = vec!(p1.clone(), p3.clone());
-    let p2_state = DistributedKeyGeneration::<>::new(&params,
+    let (p2_state, _participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params,
                                                      &p2_dh_sk,
                                                      &p2.index,
                                                      &p2coeffs,
-                                                     &mut p2_other_participants,
+                                                     &participants,
                                                      "Φ").unwrap();
     let p2_their_encrypted_secret_shares = p2_state.their_encrypted_secret_shares().unwrap();
 
-    let mut p3_other_participants: Vec<Participant> = vec!(p1.clone(), p2.clone());
-    let p3_state = DistributedKeyGeneration::<_>::new(&params,
+    let (p3_state, _participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params,
                                                       &p3_dh_sk,
                                                       &p3.index,
                                                       &p3coeffs,
-                                                      &mut p3_other_participants,
+                                                      &participants,
                                                       "Φ").unwrap();
     let p3_their_encrypted_secret_shares = p3_state.their_encrypted_secret_shares().unwrap();
 
-    let p1_my_encrypted_secret_shares = vec!(p2_their_encrypted_secret_shares[0].clone(), // XXX FIXME indexing
+    let p1_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[0].clone(),
+                                   p2_their_encrypted_secret_shares[0].clone(),
                                    p3_their_encrypted_secret_shares[0].clone());
 
-    let p2_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[0].clone(),
+    let p2_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[1].clone(),
+                                   p2_their_encrypted_secret_shares[1].clone(),
                                    p3_their_encrypted_secret_shares[1].clone());
 
-    let p3_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[1].clone(),
-                                   p2_their_encrypted_secret_shares[1].clone());
+    let p3_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[2].clone(),
+                                   p2_their_encrypted_secret_shares[2].clone(),
+                                   p3_their_encrypted_secret_shares[2].clone());
 
     let p1_state = p1_state.to_round_two(p1_my_encrypted_secret_shares).unwrap();
     let p2_state = p2_state.to_round_two(p2_my_encrypted_secret_shares).unwrap();
     let p3_state = p3_state.to_round_two(p3_my_encrypted_secret_shares).unwrap();
 
-    let (group_key, p1_sk) = p1_state.finish(p1.public_key().unwrap()).unwrap();
-    let (_, p2_sk) = p2_state.finish(p2.public_key().unwrap()).unwrap();
-    let (_, p3_sk) = p3_state.finish(p3.public_key().unwrap()).unwrap();
+    let (group_key, p1_sk) = p1_state.finish().unwrap();
+    let (_, p2_sk) = p2_state.finish().unwrap();
+    let (_, p3_sk) = p3_state.finish().unwrap();
 
     let context = b"CONTEXT STRING STOLEN FROM DALEK TEST SUITE";
     let message = b"This is a test of the tsunami alert system. This is only a test.";
