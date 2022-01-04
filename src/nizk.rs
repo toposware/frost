@@ -72,7 +72,7 @@ impl NizkOfSecretKey {
     }
 
     /// Verify that the prover does indeed know the secret key.
-    pub fn verify(&self, index: &u32, public_key: &RistrettoPoint, context_string: &str) -> Result<(), ()> {
+    pub fn verify(&self, index: &u32, public_key: &RistrettoPoint, context_string: &str) -> Result<(), Error> {
         let M_prime: RistrettoPoint = (&RISTRETTO_BASEPOINT_TABLE * &self.r) + (public_key * -&self.s);
 
         let mut hram = Sha512::new();
@@ -88,7 +88,7 @@ impl NizkOfSecretKey {
             return Ok(());
         }
 
-        Err(())
+        Err(Error::InvalidProofOfKnowledge)
     }
 
     /// Serialise this proof to an array of bytes

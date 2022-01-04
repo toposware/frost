@@ -18,6 +18,7 @@ use alloc::boxed::Box;
 
 use core::cmp::Ordering;
 use core::convert::TryInto;
+use core::fmt;
 
 #[cfg(feature = "std")]
 use std::collections::BTreeMap;
@@ -27,6 +28,11 @@ use alloc::collections::BTreeMap;
 use std::collections::btree_map::Values;
 #[cfg(feature = "alloc")]
 use alloc::collections::btree_map::Values;
+
+#[cfg(feature = "alloc")]
+use alloc::string::{String, ToString};
+#[cfg(feature = "std")]
+use std::string::{String, ToString};
 
 #[cfg(feature = "std")]
 use std::vec::Vec;
@@ -48,6 +54,38 @@ use crate::parameters::Parameters;
 use crate::precomputation::SecretCommitmentShareList;
 
 pub use crate::keygen::SecretKey;
+
+/// Errors that may happen during Signing
+#[derive(Debug, PartialEq)]
+pub enum SignatureError {
+    /// The participant is missing commitment shares
+    MissingCommitmentShares,
+    /// Invalid binding factor
+    InvalidBindingFactor,
+    /// Invalid signature
+    InvalidSignature,
+    /// Custom error
+    Custom(String),
+}
+
+impl fmt::Display for SignatureError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            SignatureError::MissingCommitmentShares => {
+                write!(f, "The participant is missing commitment shares for signing.")
+            },
+            SignatureError::InvalidBindingFactor => {
+                write!(f, "Could not compute the participant binding factor.")
+            }
+            SignatureError::InvalidSignature => {
+                write!(f, "The threshold signature is not correct.")
+            }
+            SignatureError::Custom(string) => {
+                write!(f, "{:?}", string)
+            },
+        }
+    }
+}
 
 // XXX Nonce reuse is catastrophic and results in obtaining an individual
 //     signer's long-term secret key; it must be prevented at all costs.
@@ -359,18 +397,19 @@ impl SecretKey {
         my_secret_commitment_share_list: &mut SecretCommitmentShareList,
         my_commitment_share_index: usize,
         signers: &[Signer],
-    ) -> Result<PartialThresholdSignature, &'static str>
+    ) -> Result<PartialThresholdSignature, SignatureError>
     {
         if my_commitment_share_index + 1 > my_secret_commitment_share_list.commitments.len() {
-            return Err("Commitment share index out of bounds");
+            return Err(SignatureError::MissingCommitmentShares);
         }
 
         let (binding_factors, Rs) = compute_binding_factors_and_group_commitment(&message_hash, &signers);
         let R: RistrettoPoint = Rs.values().sum();
         let challenge = compute_challenge(&message_hash, &group_key, &R);
-        let my_binding_factor = binding_factors.get(&self.index).ok_or("Could not compute our blinding factor")?;
+        let my_binding_factor = binding_factors.get(&self.index).ok_or(SignatureError::InvalidBindingFactor)?;
         let all_participant_indices: Vec<u32> = signers.iter().map(|x| x.participant_index).collect();
-        let lambda: Scalar = calculate_lagrange_coefficients(&self.index, &all_participant_indices)?;
+        let lambda: Scalar = calculate_lagrange_coefficients(&self.index, &all_participant_indices)
+            .map_err(|e| SignatureError::Custom(e.to_string()))?;
         let my_commitment_share = my_secret_commitment_share_list.commitments[my_commitment_share_index].clone();
         let z = my_commitment_share.hiding.nonce +
             (my_commitment_share.binding.nonce * my_binding_factor) +
@@ -581,7 +620,7 @@ impl SignatureAggregator<Initial<'_>> {
         // [DIFFERENT_TO_PAPER] We're reporting missing partial signatures which
         // could possibly be the fault of the aggregator, but here we explicitly
         // make it the aggregator's fault and problem.
-        if ! remaining_signers.is_empty() {
+        if !remaining_signers.is_empty() {
             // We call the aggregator "participant 0" for the sake of error messages.
             misbehaving_participants.insert(0, "Missing remaining signer(s)");
 
@@ -678,13 +717,13 @@ impl ThresholdSignature {
     /// A `Result` whose `Ok` value is an empty tuple if the threshold signature
     /// was successfully verified, otherwise a vector of the participant indices
     /// of any misbehaving participants.
-    pub fn verify(&self, group_key: &GroupKey, message_hash: &[u8; 64]) -> Result<(), ()> {
+    pub fn verify(&self, group_key: &GroupKey, message_hash: &[u8; 64]) -> Result<(), SignatureError> {
         let c_prime = compute_challenge(&message_hash, &group_key, &self.R);
         let R_prime = RistrettoPoint::vartime_double_scalar_mul_basepoint(&c_prime, &-group_key.0, &self.z);
 
         match self.R.compress() == R_prime.compress() {
             true => Ok(()),
-            false => Err(()),
+            false => Err(SignatureError::InvalidSignature),
         }
     }
 }
@@ -981,8 +1020,8 @@ mod test {
             let (p2, p2coeffs, p2_dh_sk) = Participant::new_dealer(&params, 2, "Φ");
             let (p3, p3coeffs, p3_dh_sk) = Participant::new_dealer(&params, 3, "Φ");
 
-            p2.proof_of_secret_key.as_ref().unwrap().verify(&p2.index, &p2.public_key().unwrap(), "Φ")?;
-            p3.proof_of_secret_key.as_ref().unwrap().verify(&p3.index, &p3.public_key().unwrap(), "Φ")?;
+            p2.proof_of_secret_key.as_ref().unwrap().verify(&p2.index, &p2.public_key().unwrap(), "Φ").or(Err(()))?;
+            p3.proof_of_secret_key.as_ref().unwrap().verify(&p3.index, &p3.public_key().unwrap(), "Φ").or(Err(()))?;
 
             let participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p3.clone());
             let (p1_state, _participant_lists) = DistributedKeyGeneration::<RoundOne>::new_initial(&params,
@@ -991,7 +1030,7 @@ mod test {
                                                                      &p1coeffs,
                                                                      &participants,
                                                                      "Φ").or(Err(()))?;
-            let p1_their_encrypted_secret_shares = p1_state.their_encrypted_secret_shares()?;
+            let p1_their_encrypted_secret_shares = p1_state.their_encrypted_secret_shares().or(Err(()))?;
 
             let (p2_state, _participant_lists) = DistributedKeyGeneration::<RoundOne>::new_initial(&params,
                                                                      &p2_dh_sk,
@@ -999,7 +1038,7 @@ mod test {
                                                                      &p2coeffs,
                                                                      &participants,
                                                                      "Φ").or(Err(()))?;
-            let p2_their_encrypted_secret_shares = p2_state.their_encrypted_secret_shares()?;
+            let p2_their_encrypted_secret_shares = p2_state.their_encrypted_secret_shares().or(Err(()))?;
 
             let (p3_state, _participant_lists) = DistributedKeyGeneration::<RoundOne>::new_initial(&params,
                                                                       &p3_dh_sk,
@@ -1007,7 +1046,7 @@ mod test {
                                                                       &p3coeffs,
                                                                       &participants,
                                                                       "Φ").or(Err(()))?;
-            let p3_their_encrypted_secret_shares = p3_state.their_encrypted_secret_shares()?;
+            let p3_their_encrypted_secret_shares = p3_state.their_encrypted_secret_shares().or(Err(()))?;
 
             let p1_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[0].clone(),
                                            p2_their_encrypted_secret_shares[0].clone(),
@@ -1090,7 +1129,7 @@ mod test {
                                                                      &dealer1coeffs,
                                                                      &dealers,
                                                                      "Φ").or(Err(()))?;
-            let dealer1_their_encrypted_secret_shares = dealer1_state.their_encrypted_secret_shares()?;
+            let dealer1_their_encrypted_secret_shares = dealer1_state.their_encrypted_secret_shares().or(Err(()))?;
 
             let (dealer2_state, _participant_lists) = DistributedKeyGeneration::<RoundOne>::new_initial(&params,
                                                                      &dealer2_dh_sk,
@@ -1098,7 +1137,7 @@ mod test {
                                                                      &dealer2coeffs,
                                                                      &dealers,
                                                                      "Φ").or(Err(()))?;
-            let dealer2_their_encrypted_secret_shares = dealer2_state.their_encrypted_secret_shares()?;
+            let dealer2_their_encrypted_secret_shares = dealer2_state.their_encrypted_secret_shares().or(Err(()))?;
 
             let (dealer3_state, _participant_lists) = DistributedKeyGeneration::<RoundOne>::new_initial(&params,
                                                                      &dealer3_dh_sk,
@@ -1106,7 +1145,7 @@ mod test {
                                                                      &dealer3coeffs,
                                                                      &dealers,
                                                                      "Φ").or(Err(()))?;
-            let dealer3_their_encrypted_secret_shares = dealer3_state.their_encrypted_secret_shares()?;
+            let dealer3_their_encrypted_secret_shares = dealer3_state.their_encrypted_secret_shares().or(Err(()))?;
 
             let dealer1_my_encrypted_secret_shares = vec!(dealer1_their_encrypted_secret_shares[0].clone(),
                                                           dealer2_their_encrypted_secret_shares[0].clone(),
@@ -1300,7 +1339,7 @@ mod test {
                                                                      &dealer1coeffs,
                                                                      &dealers,
                                                                      "Φ").or(Err(()))?;
-            let dealer1_their_encrypted_secret_shares = dealer1_state.their_encrypted_secret_shares()?;
+            let dealer1_their_encrypted_secret_shares = dealer1_state.their_encrypted_secret_shares().or(Err(()))?;
 
             let (dealer2_state, _participant_lists) = DistributedKeyGeneration::<RoundOne>::new_initial(&params_dealers,
                                                                      &dealer2_dh_sk,
@@ -1308,7 +1347,7 @@ mod test {
                                                                      &dealer2coeffs,
                                                                      &dealers,
                                                                      "Φ").or(Err(()))?;
-            let dealer2_their_encrypted_secret_shares = dealer2_state.their_encrypted_secret_shares()?;
+            let dealer2_their_encrypted_secret_shares = dealer2_state.their_encrypted_secret_shares().or(Err(()))?;
 
             let (dealer3_state, _participant_lists) = DistributedKeyGeneration::<RoundOne>::new_initial(&params_dealers,
                                                                      &dealer3_dh_sk,
@@ -1316,7 +1355,7 @@ mod test {
                                                                      &dealer3coeffs,
                                                                      &dealers,
                                                                      "Φ").or(Err(()))?;
-            let dealer3_their_encrypted_secret_shares = dealer3_state.their_encrypted_secret_shares()?;
+            let dealer3_their_encrypted_secret_shares = dealer3_state.their_encrypted_secret_shares().or(Err(()))?;
 
             let dealer1_my_encrypted_secret_shares = vec!(dealer1_their_encrypted_secret_shares[0].clone(),
                                                           dealer2_their_encrypted_secret_shares[0].clone(),
@@ -1539,8 +1578,8 @@ mod test {
             let (p2, p2coeffs, p2_dh_sk) = Participant::new_dealer(&params, 2, "Φ");
             let (p3, p3coeffs, p3_dh_sk) = Participant::new_dealer(&params, 3, "Φ");
 
-            p2.proof_of_secret_key.as_ref().unwrap().verify(&p2.index, &p2.public_key().unwrap(), "Φ")?;
-            p3.proof_of_secret_key.as_ref().unwrap().verify(&p3.index, &p3.public_key().unwrap(), "Φ")?;
+            p2.proof_of_secret_key.as_ref().unwrap().verify(&p2.index, &p2.public_key().unwrap(), "Φ").or(Err(()))?;
+            p3.proof_of_secret_key.as_ref().unwrap().verify(&p3.index, &p3.public_key().unwrap(), "Φ").or(Err(()))?;
 
             let participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p3.clone());
             let (p1_state, _participant_lists) = DistributedKeyGeneration::<RoundOne>::new_initial(&params,
@@ -1549,7 +1588,7 @@ mod test {
                                                                      &p1coeffs,
                                                                      &participants,
                                                                      "Φ").or(Err(()))?;
-            let p1_their_encrypted_secret_shares = p1_state.their_encrypted_secret_shares()?;
+            let p1_their_encrypted_secret_shares = p1_state.their_encrypted_secret_shares().or(Err(()))?;
 
             let (p2_state, _participant_lists) = DistributedKeyGeneration::<RoundOne>::new_initial(&params,
                                                                      &p2_dh_sk,
@@ -1557,7 +1596,7 @@ mod test {
                                                                      &p2coeffs,
                                                                      &participants,
                                                                      "Φ").or(Err(()))?;
-            let p2_their_encrypted_secret_shares = p2_state.their_encrypted_secret_shares()?;
+            let p2_their_encrypted_secret_shares = p2_state.their_encrypted_secret_shares().or(Err(()))?;
 
             let (p3_state, _participant_lists) = DistributedKeyGeneration::<RoundOne>::new_initial(&params,
                                                                       &p3_dh_sk,
@@ -1565,7 +1604,7 @@ mod test {
                                                                       &p3coeffs,
                                                                       &participants,
                                                                       "Φ").or(Err(()))?;
-            let p3_their_encrypted_secret_shares = p3_state.their_encrypted_secret_shares()?;
+            let p3_their_encrypted_secret_shares = p3_state.their_encrypted_secret_shares().or(Err(()))?;
 
             let p1_my_encrypted_secret_shares = vec!(p1_their_encrypted_secret_shares[0].clone(),
                                            p2_their_encrypted_secret_shares[0].clone(),
