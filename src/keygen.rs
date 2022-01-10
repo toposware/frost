@@ -685,24 +685,6 @@ impl VerifiableSecretSharingCommitment {
         None
     }
 
-    /// Evaluate g^P(i) without knowing the secret coefficients of the polynomial
-    pub fn evaluate_hiding(&self, term: &Scalar) -> EdwardsPoint {
-        let mut sum = EdwardsPoint::identity();
-
-        // Evaluate using Horner's method.
-        for (k, coefficient) in self.points.iter().rev().enumerate() {
-            // The secret is the constant term in the polynomial
-            sum += coefficient;
-
-            if k != (self.points.len() - 1) {
-                sum *= term;
-            }
-        }
-
-        sum
-        
-    }
-
     /// Serialise this commitment to the secret polynomial coefficients as a Vec of bytes
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut res: Vec<u8> = Vec::with_capacity(self.points.len() * 32 + 8);
