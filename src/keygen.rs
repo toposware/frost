@@ -67,7 +67,7 @@
 //! use ice_frost::DistributedKeyGeneration;
 //! use ice_frost::Parameters;
 //! use ice_frost::Participant;
-//! use curve25519_dalek::ristretto::RistrettoPoint;
+//! use curve25519_dalek::edwards::EdwardsPoint;
 //! use curve25519_dalek::traits::Identity;
 //! use curve25519_dalek::scalar::Scalar;
 //! use rand::rngs::OsRng;
@@ -213,7 +213,7 @@
 //! use ice_frost::DistributedKeyGeneration;
 //! use ice_frost::Parameters;
 //! use ice_frost::Participant;
-//! use curve25519_dalek::ristretto::RistrettoPoint;
+//! use curve25519_dalek::edwards::EdwardsPoint;
 //! use curve25519_dalek::traits::Identity;
 //! use curve25519_dalek::scalar::Scalar;
 //! use rand::rngs::OsRng;
@@ -514,9 +514,9 @@ use core::fmt;
 use core::cmp::Ordering;
 use core::ops::Deref;
 
-use curve25519_dalek::constants::RISTRETTO_BASEPOINT_TABLE;
-use curve25519_dalek::ristretto::CompressedRistretto;
-use curve25519_dalek::ristretto::RistrettoPoint;
+use curve25519_dalek::constants::ED25519_BASEPOINT_TABLE;
+use curve25519_dalek::edwards::CompressedEdwardsY;
+use curve25519_dalek::edwards::EdwardsPoint;
 use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::traits::Identity;
 
@@ -554,6 +554,8 @@ pub enum Error {
     ComplaintVerificationError,
     /// GroupKey generation failure
     InvalidGroupKey,
+    /// Point not on the prime-order subgroup
+    InvalidPoint,
     /// Invalid NiZK proof of knowledge
     InvalidProofOfKnowledge,
     /// The participant is missing some others' secret shares
@@ -588,6 +590,9 @@ impl fmt::Display for Error {
             Error::InvalidGroupKey => {
                 write!(f, "Could not generate a valid group key with the given commitments.")
             },
+            Error::InvalidPoint => {
+                write!(f, "The point does not belong to the prime-order subgroup.")
+            }
             Error::InvalidProofOfKnowledge => {
                 write!(f, "The NiZK proof of knowledge of the secret key is not correct.")
             }
@@ -668,12 +673,12 @@ pub struct VerifiableSecretSharingCommitment {
     /// The index of this participant.
     pub index: u32,
     /// The commitments to the participant's secret coefficients.
-    pub points: Vec<RistrettoPoint>,
+    pub points: Vec<EdwardsPoint>,
 }
 
 impl VerifiableSecretSharingCommitment {
     /// Retrieve \\( \alpha_{i0} * B \\), where \\( B \\) is the Ristretto basepoint.
-    pub fn public_key(&self) -> Option<&RistrettoPoint> {
+    pub fn public_key(&self) -> Option<&EdwardsPoint> {
         if !self.points.is_empty() {
             return Some(&self.points[0]);
         }
@@ -681,8 +686,8 @@ impl VerifiableSecretSharingCommitment {
     }
 
     /// Evaluate g^P(i) without knowing the secret coefficients of the polynomial
-    pub fn evaluate_hiding(&self, term: &Scalar) -> RistrettoPoint {
-        let mut sum = RistrettoPoint::identity();
+    pub fn evaluate_hiding(&self, term: &Scalar) -> EdwardsPoint {
+        let mut sum = EdwardsPoint::identity();
 
         // Evaluate using Horner's method.
         for (k, coefficient) in self.points.iter().rev().enumerate() {
@@ -727,18 +732,21 @@ impl VerifiableSecretSharingCommitment {
                 .try_into()
                 .map_err(|_| Error::SerialisationError)?,
         );
-        let mut points: Vec<RistrettoPoint> =
+        let mut points: Vec<EdwardsPoint> =
             Vec::with_capacity(len as usize);
         let mut index_slice = 8usize;
         let mut array = [0u8; 32];
 
         for _ in 0..len {
             array.copy_from_slice(&bytes[index_slice..index_slice + 32]);
-            points.push(
-                CompressedRistretto(array)
-                    .decompress()
-                    .ok_or(Error::SerialisationError)?,
-            );
+            let point = CompressedEdwardsY(array)
+                .decompress()
+                .ok_or(Error::SerialisationError)?;
+            if point.is_torsion_free() {
+                points.push(point);
+            } else {
+                return Err(Error::InvalidPoint);
+            }
             index_slice += 32;
         }
 
@@ -777,9 +785,9 @@ impl Deref for DHPrivateKey {
     }
 }
 
-/// A Diffie-Hellman public key wrapper type around a RistrettoPoint
+/// A Diffie-Hellman public key wrapper type around a EdwardsPoint
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DHPublicKey(pub(crate) RistrettoPoint);
+pub struct DHPublicKey(pub(crate) EdwardsPoint);
 
 impl DHPublicKey {
     /// Serialise this Diffie-Hellman public key as an array of bytes
@@ -791,16 +799,19 @@ impl DHPublicKey {
     pub fn from_bytes(bytes: &[u8]) -> Result<DHPublicKey, Error> {
         let mut array = [0u8; 32];
         array.copy_from_slice(&bytes[..32]);
-        let key = CompressedRistretto(array)
+        let key = CompressedEdwardsY(array)
             .decompress()
             .ok_or(Error::SerialisationError)?;
+        if !key.is_torsion_free() {
+            return Err(Error::InvalidPoint);
+        }
 
         Ok(DHPublicKey(key))
     }
 }
 
 impl Deref for DHPublicKey {
-    type Target = RistrettoPoint;
+    type Target = EdwardsPoint;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -920,7 +931,7 @@ impl Participant {
         // encryption and for complaint generation.
 
         let dh_private_key = DHPrivateKey(Scalar::random(&mut rng));
-        let dh_public_key = DHPublicKey(&RISTRETTO_BASEPOINT_TABLE * &dh_private_key);
+        let dh_public_key = DHPublicKey(&ED25519_BASEPOINT_TABLE * &dh_private_key);
 
         // Compute a proof of knowledge of dh_secret_key
         let proof_of_dh_private_key: NizkOfSecretKey =
@@ -958,7 +969,7 @@ impl Participant {
             //         C_i = [\phi_{i0}, ..., \phi_{i(t-1)}], where \phi_{ij} = g^{a_{ij}},
             //         0 ≤ j ≤ t-1.
             for j in 0..t {
-                commitments.points.push(&coefficients.0[j] * &RISTRETTO_BASEPOINT_TABLE);
+                commitments.points.push(&coefficients.0[j] * &ED25519_BASEPOINT_TABLE);
             }
 
             // Yes, I know the steps are out of order.  It saves one scalar multiplication.
@@ -1042,7 +1053,7 @@ impl Participant {
     /// Retrieve \\( \alpha_{i0} * B \\), where \\( B \\) is the Ristretto basepoint.
     ///
     /// This is used to pass into the final call to `DistributedKeyGeneration::<RoundTwo>.finish()`.
-    pub fn public_key(&self) -> Option<&RistrettoPoint> {
+    pub fn public_key(&self) -> Option<&EdwardsPoint> {
         if self.commitments.is_some() {
             return self.commitments.as_ref().unwrap().public_key();
         }
@@ -1580,7 +1591,7 @@ impl DistributedKeyGeneration<RoundOne> {
         let mut valid_participants: Vec<Participant> = Vec::with_capacity(parameters.n as usize);
         let mut misbehaving_participants: Vec<u32> = Vec::new();
 
-        let dh_public_key = DHPublicKey(&RISTRETTO_BASEPOINT_TABLE * &dh_private_key);
+        let dh_public_key = DHPublicKey(&ED25519_BASEPOINT_TABLE * &dh_private_key);
 
         // Bail if we didn't get enough participants.
         if participants.len() != parameters.n as usize {
@@ -1758,7 +1769,7 @@ impl DistributedKeyGeneration<RoundOne> {
 
                                 let r = Scalar::random(&mut rng);
 
-                                let a1 = &RISTRETTO_BASEPOINT_TABLE * &r;
+                                let a1 = &ED25519_BASEPOINT_TABLE * &r;
                                 let a2 = *pk.1 * r;
 
                                 let mut h = Sha512::new();
@@ -1868,11 +1879,14 @@ impl SecretShare {
     /// Verify that this secret share was correctly computed w.r.t. some secret
     /// polynomial coefficients attested to by some `commitment`.
     pub(crate) fn verify(&self, commitment: &VerifiableSecretSharingCommitment) -> Result<(), Error> {
-        let lhs = &RISTRETTO_BASEPOINT_TABLE * &self.polynomial_evaluation;
+        let lhs = &ED25519_BASEPOINT_TABLE * &self.polynomial_evaluation;
         let term: Scalar = self.receiver_index.into();
-        let mut rhs: RistrettoPoint = RistrettoPoint::identity();
+        let mut rhs: EdwardsPoint = EdwardsPoint::identity();
 
         for (index, com) in commitment.points.iter().rev().enumerate() {
+            if !com.is_torsion_free() {
+                return Err(Error::InvalidPoint);
+            }
             rhs += com;
 
             if index != (commitment.points.len() - 1) {
@@ -1982,9 +1996,9 @@ impl EncryptedSecretShare {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ComplaintProof {
     /// a1 = g^r.
-    pub a1: RistrettoPoint,
+    pub a1: EdwardsPoint,
     /// a2 = pk_l^r.
-    pub a2: RistrettoPoint,
+    pub a2: EdwardsPoint,
     /// z = r + H(pk_i, pk_l, k_il).sh_i
     pub z: Scalar,
 }
@@ -2004,14 +2018,20 @@ impl ComplaintProof {
     pub fn from_bytes(bytes: &[u8]) -> Result<ComplaintProof, Error> {
         let mut array = [0u8; 32];
         array.copy_from_slice(&bytes[0..32]);
-        let a1 = CompressedRistretto(array)
+        let a1 = CompressedEdwardsY(array)
             .decompress()
             .ok_or(Error::SerialisationError)?;
+        if !a1.is_torsion_free() {
+            return Err(Error::InvalidPoint);
+        }
 
         array.copy_from_slice(&bytes[32..64]);
-        let a2 = CompressedRistretto(array)
+        let a2 = CompressedEdwardsY(array)
             .decompress()
             .ok_or(Error::SerialisationError)?;
+        if !a2.is_torsion_free() {
+            return Err(Error::InvalidPoint);
+        }
 
         array.copy_from_slice(&bytes[64..96]);
         let z = Scalar::from_canonical_bytes(array)
@@ -2040,8 +2060,8 @@ impl Complaint {
     /// --  a2 + h.k_il = z.pk_l
     pub fn verify(
         &self, 
-        pk_i: &RistrettoPoint,
-        pk_l: &RistrettoPoint,
+        pk_i: &EdwardsPoint,
+        pk_l: &EdwardsPoint,
     ) -> Result<(), Error> {
         let mut h = Sha512::new();
         h.update(pk_i.compress().to_bytes());
@@ -2052,11 +2072,11 @@ impl Complaint {
 
         let h = Scalar::from_hash(h);
 
-        if self.proof.a1 + pk_i * h != &RISTRETTO_BASEPOINT_TABLE * &self.proof.z {
+        if self.proof.a1 + pk_i * h != &ED25519_BASEPOINT_TABLE * &self.proof.z {
             return Err(Error::ComplaintVerificationError)
         }
 
-        if let Some(key_as_point) = CompressedRistretto::from_slice(&self.dh_key).decompress() {
+        if let Some(key_as_point) = CompressedEdwardsY::from_slice(&self.dh_key).decompress() {
             if self.proof.a2 + key_as_point * h != pk_l * self.proof.z {
                 return Err(Error::ComplaintVerificationError)
             }
@@ -2170,7 +2190,7 @@ impl DistributedKeyGeneration<RoundTwo> {
             index_vector.push(commitment.index);
         }
 
-        let mut group_key = RistrettoPoint::identity();
+        let mut group_key = EdwardsPoint::identity();
 
         // The group key is the interpolation at 0 of all index 0 of the dealers' commitments.
         for commitment in self.state.their_commitments.as_ref().unwrap().iter() {
@@ -2194,8 +2214,8 @@ impl DistributedKeyGeneration<RoundTwo> {
         encrypted_share: &EncryptedSecretShare,
         complaint: &Complaint,
     ) -> u32 {
-        let mut pk_maker = RistrettoPoint::identity();
-        let mut pk_accused = RistrettoPoint::identity();
+        let mut pk_maker = EdwardsPoint::identity();
+        let mut pk_accused = EdwardsPoint::identity();
         let mut commitment_accused = VerifiableSecretSharingCommitment { index: 0, points: Vec::new() };
 
         for commitment in self.state.their_commitments.as_ref().unwrap().iter() {
@@ -2218,7 +2238,7 @@ impl DistributedKeyGeneration<RoundTwo> {
             }
         };
 
-        if pk_maker == RistrettoPoint::identity() || pk_accused == RistrettoPoint::identity() {
+        if pk_maker == EdwardsPoint::identity() || pk_accused == EdwardsPoint::identity() {
             return complaint.maker_index
         }
 
@@ -2271,7 +2291,7 @@ pub struct IndividualPublicKey {
     /// The participant index to which this key belongs.
     pub index: u32,
     /// The public verification share.
-    pub share: RistrettoPoint,
+    pub share: EdwardsPoint,
 }
 
 impl IndividualPublicKey {
@@ -2299,7 +2319,7 @@ impl IndividualPublicKey {
         commitments: &[VerifiableSecretSharingCommitment],
     ) -> Result<(), Error>
     {
-        let mut rhs: RistrettoPoint = RistrettoPoint::identity();
+        let mut rhs: EdwardsPoint = EdwardsPoint::identity();
         let term: Scalar = self.index.into();
 
         let mut index_vector: Vec<u32> = Vec::new();
@@ -2308,7 +2328,7 @@ impl IndividualPublicKey {
         }
 
         for commitment in commitments.iter() {
-            let mut tmp: RistrettoPoint = RistrettoPoint::identity();
+            let mut tmp: EdwardsPoint = EdwardsPoint::identity();
             for (index, com) in commitment.points.iter().rev().enumerate() {
                 tmp += com;
 
@@ -2355,7 +2375,7 @@ impl IndividualPublicKey {
         commitments: &[VerifiableSecretSharingCommitment],
     ) -> Self
     {
-        let mut share: RistrettoPoint = RistrettoPoint::identity();
+        let mut share: EdwardsPoint = EdwardsPoint::identity();
         let term: Scalar = participant_index.into();
 
         let mut index_vector: Vec<u32> = Vec::new();
@@ -2364,7 +2384,7 @@ impl IndividualPublicKey {
         }
 
         for commitment in commitments.iter() {
-            let mut tmp: RistrettoPoint = RistrettoPoint::identity();
+            let mut tmp: EdwardsPoint = EdwardsPoint::identity();
             for (index, com) in commitment.points.iter().rev().enumerate() {
                 tmp += com;
 
@@ -2402,9 +2422,12 @@ impl IndividualPublicKey {
 
         let mut array = [0u8; 32];
         array.copy_from_slice(&bytes[4..36]);
-        let share = CompressedRistretto(array)
+        let share = CompressedEdwardsY(array)
             .decompress()
             .ok_or(Error::SerialisationError)?;
+        if !share.is_torsion_free() {
+            return Err(Error::InvalidPoint);
+        }
 
         Ok(IndividualPublicKey { index, share })
     }
@@ -2423,7 +2446,7 @@ pub struct SecretKey {
 impl SecretKey {
     /// Derive the corresponding public key for this secret key.
     pub fn to_public(&self) -> IndividualPublicKey {
-        let share = &RISTRETTO_BASEPOINT_TABLE * &self.key;
+        let share = &ED25519_BASEPOINT_TABLE * &self.key;
 
         IndividualPublicKey {
             index: self.index,
@@ -2465,7 +2488,7 @@ impl From<&SecretKey> for IndividualPublicKey {
 
 /// A public key, used to verify a signature made by a threshold of a group of participants.
 #[derive(Clone, Copy, Debug, Eq)]
-pub struct GroupKey(pub(crate) RistrettoPoint);
+pub struct GroupKey(pub(crate) EdwardsPoint);
 
 impl PartialEq for GroupKey {
     fn eq(&self, other: &Self) -> bool {
@@ -2481,7 +2504,12 @@ impl GroupKey {
 
     /// Deserialise this group public key from an array of bytes.
     pub fn from_bytes(bytes: [u8; 32]) -> Result<GroupKey, Error> {
-        let point = CompressedRistretto(bytes).decompress().ok_or(Error::SerialisationError)?;
+        let point = CompressedEdwardsY(bytes)
+            .decompress()
+            .ok_or(Error::SerialisationError)?;
+        if !point.is_torsion_free() {
+            return Err(Error::InvalidPoint);
+        }
 
         Ok(GroupKey(point))
     }
@@ -2520,7 +2548,7 @@ mod test {
         let mut commitments = VerifiableSecretSharingCommitment { index: 1, points: Vec::new() };
 
         for i in 0..5 {
-            commitments.points.push(&RISTRETTO_BASEPOINT_TABLE * &coefficients.0[i]);
+            commitments.points.push(&ED25519_BASEPOINT_TABLE * &coefficients.0[i]);
         }
 
         assert!(share.verify(&commitments).is_ok());
@@ -2542,7 +2570,7 @@ mod test {
         let mut commitments = VerifiableSecretSharingCommitment { index: 1, points: Vec::new() };
 
         for i in 0..5 {
-            commitments.points.push(&RISTRETTO_BASEPOINT_TABLE * &coefficients.0[i]);
+            commitments.points.push(&ED25519_BASEPOINT_TABLE * &coefficients.0[i]);
         }
 
         assert!(share.verify(&commitments).is_ok());
@@ -2573,7 +2601,7 @@ mod test {
 
         let (p1_group_key, p1_secret_key) = result.unwrap();
 
-        assert!(p1_group_key.0.compress() == (&p1_secret_key.key * &RISTRETTO_BASEPOINT_TABLE).compress());
+        assert!(p1_group_key.0.compress() == (&p1_secret_key.key * &ED25519_BASEPOINT_TABLE).compress());
     }
 
     #[test]
@@ -2695,7 +2723,7 @@ mod test {
         group_secret_key += calculate_lagrange_coefficients(&4, &indices).unwrap()*p4_secret_key.key;
         group_secret_key += calculate_lagrange_coefficients(&5, &indices).unwrap()*p5_secret_key.key;
 
-        let group_key = &group_secret_key * &RISTRETTO_BASEPOINT_TABLE;
+        let group_key = &group_secret_key * &ED25519_BASEPOINT_TABLE;
 
         assert!(p5_group_key.0.compress() == group_key.compress())
     }

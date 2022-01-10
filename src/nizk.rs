@@ -13,8 +13,8 @@
 
 use crate::keygen::Error;
 
-use curve25519_dalek::constants::RISTRETTO_BASEPOINT_TABLE;
-use curve25519_dalek::ristretto::RistrettoPoint;
+use curve25519_dalek::constants::ED25519_BASEPOINT_TABLE;
+use curve25519_dalek::edwards::EdwardsPoint;
 use curve25519_dalek::scalar::Scalar;
 
 use rand::CryptoRng;
@@ -50,13 +50,13 @@ impl NizkOfSecretKey {
     pub fn prove(
         index: &u32,
         secret_key: &Scalar,
-        public_key: &RistrettoPoint,
+        public_key: &EdwardsPoint,
         context_string: &str,
         mut csprng: impl Rng + CryptoRng,
     ) -> Self
     {
         let k: Scalar = Scalar::random(&mut csprng);
-        let M: RistrettoPoint = &k * &RISTRETTO_BASEPOINT_TABLE;
+        let M: EdwardsPoint = &k * &ED25519_BASEPOINT_TABLE;
 
         let mut hram = Sha512::new();
 
@@ -72,8 +72,11 @@ impl NizkOfSecretKey {
     }
 
     /// Verify that the prover does indeed know the secret key.
-    pub fn verify(&self, index: &u32, public_key: &RistrettoPoint, context_string: &str) -> Result<(), Error> {
-        let M_prime: RistrettoPoint = (&RISTRETTO_BASEPOINT_TABLE * &self.r) + (public_key * -&self.s);
+    pub fn verify(&self, index: &u32, public_key: &EdwardsPoint, context_string: &str) -> Result<(), Error> {
+        if !public_key.is_torsion_free() {
+            return Err(Error::InvalidPoint);
+        }
+        let M_prime: EdwardsPoint = (&ED25519_BASEPOINT_TABLE * &self.r) + (public_key * -&self.s);
 
         let mut hram = Sha512::new();
 

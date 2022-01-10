@@ -242,20 +242,15 @@ fn signing_and_verification_with_ed25519_dalek_2_out_of_3() {
     let public_key_bytes = group_key.to_bytes();
     let public_key = ed25519_dalek::PublicKey::from_bytes(&public_key_bytes[..]);
 
-    if public_key.is_ok() {
-        let pk = public_key.unwrap();
-        println!("Verifying signature");
-        let verified = pk.verify(&message_hash[..], &signature).is_ok();
+    println!("Verifying signature");
+    println!("Public key was okay? {:?}", public_key.is_ok());
 
-        if verified {
-            println!("Public key was okay? {:?}", pk.to_bytes());
-            println!("Signature checked out? {:?}", signature_bytes);
-            println!("p1 secret key: {:?}", p1_sk);
-            println!("p2 secret key: {:?}", p2_sk);
-            println!("p3 secret key: {:?}", p3_sk);
-            println!("p1 secret commitment shares: {:?}", p1_secret_comshares);
-            println!("p3 secret commitment shares: {:?}", p3_secret_comshares);
-            assert!(false);
-        }
-    }
+    let pk = public_key.unwrap();
+    println!("Signature checked out? {:?}", pk.verify(&message_hash[..], &signature).is_ok());
+
+    println!("p1 secret key: {:?}", p1_sk);
+    println!("p2 secret key: {:?}", p2_sk);
+    println!("p3 secret key: {:?}", p3_sk);
+    println!("p1 secret commitment shares: {:?}", p1_secret_comshares);
+    println!("p3 secret commitment shares: {:?}", p3_secret_comshares);
 }

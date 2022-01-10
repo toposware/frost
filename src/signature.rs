@@ -39,9 +39,9 @@ use std::vec::Vec;
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 
-use curve25519_dalek::constants::RISTRETTO_BASEPOINT_TABLE;
-use curve25519_dalek::ristretto::CompressedRistretto;
-use curve25519_dalek::ristretto::RistrettoPoint;
+use curve25519_dalek::constants::ED25519_BASEPOINT_TABLE;
+use curve25519_dalek::edwards::CompressedEdwardsY;
+use curve25519_dalek::edwards::EdwardsPoint;
 use curve25519_dalek::scalar::Scalar;
 
 use sha2::Digest;
@@ -97,7 +97,7 @@ pub struct Signer {
     pub participant_index: u32,
     /// One of the commitments that were published by each signing participant
     /// in the pre-computation phase.
-    pub published_commitment_share: (RistrettoPoint, RistrettoPoint),
+    pub published_commitment_share: (EdwardsPoint, EdwardsPoint),
 }
 
 impl Ord for Signer {
@@ -161,7 +161,7 @@ impl PartialThresholdSignature {
 /// A complete, aggregated threshold signature.
 #[derive(Debug, Eq, PartialEq)]
 pub struct ThresholdSignature {
-    pub(crate) R: RistrettoPoint,
+    pub(crate) R: EdwardsPoint,
     pub(crate) z: Scalar,
 }
 
@@ -181,7 +181,10 @@ impl ThresholdSignature {
 
         array.copy_from_slice(&bytes[..32]);
 
-        let R = CompressedRistretto(array).decompress().ok_or(Error::SerialisationError)?;
+        let R = CompressedEdwardsY(array).decompress().ok_or(Error::SerialisationError)?;
+        if !R.is_torsion_free() {
+            return Err(Error::InvalidPoint);
+        }
 
         array.copy_from_slice(&bytes[32..]);
 
@@ -236,9 +239,9 @@ impl $type {
 // XXX TODO there might be a more efficient way to optimise this data structure
 //     and its algorithms?
 #[derive(Debug)]
-struct SignerRs(pub(crate) BTreeMap<[u8; 4], RistrettoPoint>);
+struct SignerRs(pub(crate) BTreeMap<[u8; 4], EdwardsPoint>);
 
-impl_indexed_hashmap!(Type = SignerRs, Item = RistrettoPoint);
+impl_indexed_hashmap!(Type = SignerRs, Item = EdwardsPoint);
 
 /// A type for storing signers' partial threshold signatures along with the
 /// respective signer participant index.
@@ -250,9 +253,9 @@ impl_indexed_hashmap!(Type = PartialThresholdSignatures, Item = Scalar);
 /// A type for storing signers' individual public keys along with the respective
 /// signer participant index.
 #[derive(Debug)]
-pub(crate) struct IndividualPublicKeys(pub(crate) BTreeMap<[u8; 4], RistrettoPoint>);
+pub(crate) struct IndividualPublicKeys(pub(crate) BTreeMap<[u8; 4], EdwardsPoint>);
 
-impl_indexed_hashmap!(Type = IndividualPublicKeys, Item = RistrettoPoint);
+impl_indexed_hashmap!(Type = IndividualPublicKeys, Item = EdwardsPoint);
 
 /// Compute a Sha-512 hash of a `context_string` and a `message`.
 pub fn compute_message_hash(context_string: &[u8], message: &[u8]) -> [u8; 64] {
@@ -317,7 +320,7 @@ fn compute_binding_factors_and_group_commitment(
     (binding_factors, Rs)
 }
 
-fn compute_challenge(message_hash: &[u8; 64], group_key: &GroupKey, R: &RistrettoPoint) -> Scalar {
+fn compute_challenge(message_hash: &[u8; 64], group_key: &GroupKey, R: &EdwardsPoint) -> Scalar {
     let mut h2 = Sha512::new();
 
     h2.update(R.compress().as_bytes());
@@ -401,7 +404,7 @@ impl SecretKey {
         }
 
         let (binding_factors, Rs) = compute_binding_factors_and_group_commitment(&message_hash, &signers);
-        let R: RistrettoPoint = Rs.values().sum();
+        let R: EdwardsPoint = Rs.values().sum();
         let challenge = compute_challenge(&message_hash, &group_key, &R);
         let my_binding_factor = binding_factors.get(&self.index).ok_or(SignatureError::InvalidBindingFactor)?;
         let all_participant_indices: Vec<u32> = signers.iter().map(|x| x.participant_index).collect();
@@ -544,7 +547,7 @@ impl SignatureAggregator<Initial<'_>> {
     pub fn include_signer(
         &mut self,
         participant_index: u32,
-        published_commitment_share: (RistrettoPoint, RistrettoPoint),
+        published_commitment_share: (EdwardsPoint, EdwardsPoint),
         public_key: IndividualPublicKey)
     {
         assert_eq!(participant_index, public_key.index,
@@ -658,7 +661,7 @@ impl SignatureAggregator<Finalized> {
         let mut misbehaving_participants: BTreeMap<u32, &'static str> = BTreeMap::new();
         
         let (_, Rs) = compute_binding_factors_and_group_commitment(&self.aggregator.message_hash, &self.state.signers);
-        let R: RistrettoPoint = Rs.values().sum();
+        let R: EdwardsPoint = Rs.values().sum();
         let c = compute_challenge(&self.aggregator.message_hash, &self.state.group_key, &R);
         let all_participant_indices: Vec<u32> = self.state.signers.iter().map(|x| x.participant_index).collect();
         let mut z = Scalar::zero();
@@ -685,7 +688,7 @@ impl SignatureAggregator<Finalized> {
             // Again, this unwrap() cannot fail, because of the checks in finalize().
             let Y_i = self.state.public_keys.get(&signer.participant_index).unwrap();
 
-            let check = &RISTRETTO_BASEPOINT_TABLE * partial_sig;
+            let check = &ED25519_BASEPOINT_TABLE * partial_sig;
 
             // Again, this unwrap() cannot fail, because we check the
             // participant indexes against the expected ones in finalize().
@@ -716,7 +719,7 @@ impl ThresholdSignature {
     /// of any misbehaving participants.
     pub fn verify(&self, group_key: &GroupKey, message_hash: &[u8; 64]) -> Result<(), SignatureError> {
         let c_prime = compute_challenge(&message_hash, &group_key, &self.R);
-        let R_prime = RistrettoPoint::vartime_double_scalar_mul_basepoint(&c_prime, &-group_key.0, &self.z);
+        let R_prime = EdwardsPoint::vartime_double_scalar_mul_basepoint(&c_prime, &-group_key.0, &self.z);
 
         match self.R.compress() == R_prime.compress() {
             true => Ok(()),
@@ -1572,7 +1575,7 @@ mod test {
         let (p1_public_comshares, _) = generate_commitment_share_lists(&mut OsRng, 1, 1);
         let (p2_public_comshares, _) = generate_commitment_share_lists(&mut OsRng, 2, 1);
 
-        let mut aggregator = SignatureAggregator::new(params, GroupKey(RistrettoPoint::identity()), &context[..], &message[..]);
+        let mut aggregator = SignatureAggregator::new(params, GroupKey(EdwardsPoint::identity()), &context[..], &message[..]);
 
         let p1_sk = SecretKey{ index: 1, key: Scalar::random(&mut OsRng) };
         let p2_sk = SecretKey{ index: 2, key: Scalar::random(&mut OsRng) };
