@@ -320,9 +320,6 @@ fn compute_binding_factors_and_group_commitment(
 fn compute_challenge(message_hash: &[u8; 64], group_key: &GroupKey, R: &RistrettoPoint) -> Scalar {
     let mut h2 = Sha512::new();
 
-    // XXX [PAPER] Decide if we want a context string for the challenge.  This
-    // would break compatibility with standard ed25519 libraries for verification.
-    h2.update(b"FROST-SHA512");
     h2.update(R.compress().as_bytes());
     h2.update(group_key.to_bytes());
     h2.update(&message_hash[..]);
