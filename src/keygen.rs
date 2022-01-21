@@ -2,7 +2,7 @@
 //
 // This file is part of ice-frost.
 // Copyright (c) 2020 isis lovecruft
-// Copyright (c) 2021 Toposware Inc.
+// Copyright (c) 2021-2022 Toposware Inc.
 // See LICENSE for licensing information.
 //
 // Authors:
