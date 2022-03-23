@@ -181,9 +181,9 @@ impl SecretCommitmentShareList {
         let mut res = Vec::with_capacity(8 + 128 * self.commitments.len());
 
         let len = self.commitments.len();
-        res.extend_from_slice(&mut TryInto::<u32>::try_into(len).unwrap().to_le_bytes());
+        res.extend_from_slice(&TryInto::<u32>::try_into(len).unwrap().to_le_bytes());
         for i in 0..len {
-            res.extend_from_slice(&mut self.commitments[i].to_bytes());
+            res.extend_from_slice(&self.commitments[i].to_bytes());
         }
 
         res
@@ -226,13 +226,13 @@ impl PublicCommitmentShareList {
     /// Serialise this commitment share list to a Vec of bytes
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut res = Vec::with_capacity(8 + 64 * self.commitments.len());
-        res.extend_from_slice(&mut self.participant_index.to_le_bytes());
+        res.extend_from_slice(&self.participant_index.to_le_bytes());
 
         let len = self.commitments.len();
-        res.extend_from_slice(&mut TryInto::<u32>::try_into(len).unwrap().to_le_bytes());
+        res.extend_from_slice(&TryInto::<u32>::try_into(len).unwrap().to_le_bytes());
         for i in 0..len {
-            res.extend_from_slice(&mut self.commitments[i].0.compress().to_bytes());
-            res.extend_from_slice(&mut self.commitments[i].1.compress().to_bytes());
+            res.extend_from_slice(&self.commitments[i].0.compress().to_bytes());
+            res.extend_from_slice(&self.commitments[i].1.compress().to_bytes());
         }
 
         res

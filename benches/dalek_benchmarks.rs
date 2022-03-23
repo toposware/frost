@@ -310,7 +310,7 @@ mod dkg_benches {
 
         let mut signers = Vec::<Participant>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
         let (s1, _s1_dh_sk) = Participant::new_signer(&params, 1, "Φ", &mut rng);
-        signers.push(s1.clone());
+        signers.push(s1);
 
         for i in 2..NUMBER_OF_PARTICIPANTS+1 {
             let (s, _) = Participant::new_signer(&params, i, "Φ", &mut rng);
