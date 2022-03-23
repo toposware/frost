@@ -13,10 +13,6 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: 1.51.0
-          override: true
-
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:
@@ -34,9 +30,6 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: 1.51.0
-          override: true
       - name: Add target
         run: rustup target add ${{ matrix.target }}
       - name: cargo fetch
@@ -53,9 +46,6 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: 1.51.0
-          override: true
       # Build benchmarks to prevent bitrot
       - name: Build benchmarks
         uses: actions-rs/cargo@v1
@@ -64,7 +54,7 @@ jobs:
           args: --all --benches
 
   # clippy:
-  #   name: Clippy (1.51.0)
+  #   name: Clippy
   #   timeout-minutes: 30
   #   runs-on: ubuntu-latest
   #   steps:
@@ -76,7 +66,7 @@ jobs:
   #     - name: Run clippy
   #       uses: actions-rs/clippy-check@v1
   #       with:
-  #         name: Clippy (1.51.0)
+  #         name: Clippy
   #         token: ${{ secrets.GITHUB_TOKEN }}
   #         args: --all-targets -- -D warnings
 
@@ -87,9 +77,6 @@ jobs:
   #   steps:
   #     - uses: actions/checkout@v2
   #     - uses: actions-rs/toolchain@v1
-  #       with:
-  #         toolchain: 1.51.0
-  #         override: true
   #     # Ensure all code has been formatted with rustfmt
   #     - run: rustup component add rustfmt
   #     - name: Check formatting

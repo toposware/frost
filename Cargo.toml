@@ -5,7 +5,7 @@ authors = [
     "isis lovecruft <isis@patternsinthevoid.net>",
     "Toposware Developers <dev@toposware.com>"
 ]
-edition = "2018"
+edition = "2021"
 description = "ICE-FROST: Identifiable Cheating Entity Flexible Round-Optimised Threshold Signature using the Ristretto group"
 readme = "README.md"
 license = "BSD-3-Clause"
