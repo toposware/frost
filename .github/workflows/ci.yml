@@ -53,22 +53,22 @@ jobs:
           command: build
           args: --all --benches
 
-  # clippy:
-  #   name: Clippy
-  #   timeout-minutes: 30
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v2
-  #     - uses: actions-rs/toolchain@v1
-  #       with:
-  #         components: clippy
-  #         override: true
-  #     - name: Run clippy
-  #       uses: actions-rs/clippy-check@v1
-  #       with:
-  #         name: Clippy
-  #         token: ${{ secrets.GITHUB_TOKEN }}
-  #         args: --all-targets -- -D warnings
+  clippy:
+    name: Clippy
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          components: clippy
+          override: true
+      - name: Run clippy
+        uses: actions-rs/clippy-check@v1
+        with:
+          name: Clippy
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-targets -- -D warnings
 
   # fmt:
   #   name: Rustfmt

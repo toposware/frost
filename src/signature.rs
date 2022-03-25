@@ -403,9 +403,9 @@ impl SecretKey {
             return Err(SignatureError::MissingCommitmentShares);
         }
 
-        let (binding_factors, Rs) = compute_binding_factors_and_group_commitment(&message_hash, &signers);
+        let (binding_factors, Rs) = compute_binding_factors_and_group_commitment(message_hash, signers);
         let R: RistrettoPoint = Rs.values().sum();
-        let challenge = compute_challenge(&message_hash, &group_key, &R);
+        let challenge = compute_challenge(message_hash, group_key, &R);
         let my_binding_factor = binding_factors.get(&self.index).ok_or(SignatureError::InvalidBindingFactor)?;
         let all_participant_indices: Vec<u32> = signers.iter().map(|x| x.participant_index).collect();
         let lambda: Scalar = calculate_lagrange_coefficients(&self.index, &all_participant_indices)
@@ -563,7 +563,7 @@ impl SignatureAggregator<Initial<'_>> {
     /// # Returns
     ///
     /// A `&Vec<Signer>` of the participating signers in this round.
-    pub fn get_signers<'sa>(&'sa mut self) -> &'sa Vec<Signer> {
+    pub fn get_signers(&'_ mut self) -> &'_ Vec<Signer> {
         // .sort() must be called before .dedup() because the latter only
         // removes consecutive repeated elements.
         self.state.signers.sort();
@@ -643,7 +643,7 @@ impl SignatureAggregator<Initial<'_>> {
             return Err(misbehaving_participants);
         }
 
-        let message_hash = compute_message_hash(&self.aggregator.context, &self.aggregator.message);
+        let message_hash = compute_message_hash(self.aggregator.context, self.aggregator.message);
 
         Ok(SignatureAggregator { state: self.state, aggregator: Finalized { message_hash } })
     }
@@ -718,7 +718,7 @@ impl ThresholdSignature {
     /// was successfully verified, otherwise a vector of the participant indices
     /// of any misbehaving participants.
     pub fn verify(&self, group_key: &GroupKey, message_hash: &[u8; 64]) -> Result<(), SignatureError> {
-        let c_prime = compute_challenge(&message_hash, &group_key, &self.R);
+        let c_prime = compute_challenge(message_hash, group_key, &self.R);
         let R_prime = RistrettoPoint::vartime_double_scalar_mul_basepoint(&c_prime, &-group_key.0, &self.z);
 
         match self.R.compress() == R_prime.compress() {
@@ -747,7 +747,7 @@ mod test {
 
         let (p1, p1coeffs, p1_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
 
-        p1.proof_of_secret_key.as_ref().unwrap().verify(&p1.index, &p1.public_key().unwrap(), "Φ").unwrap();
+        p1.proof_of_secret_key.as_ref().unwrap().verify(&p1.index, p1.public_key().unwrap(), "Φ").unwrap();
 
         let participants: Vec<Participant> = vec![p1.clone()];
         let (p1_state, _participant_lists) = DistributedKeyGeneration::<RoundOne>::new_initial(&params,
@@ -1034,8 +1034,8 @@ mod test {
             let (p2, p2coeffs, p2_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
             let (p3, p3coeffs, p3_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
 
-            p2.proof_of_secret_key.as_ref().unwrap().verify(&p2.index, &p2.public_key().unwrap(), "Φ").or(Err(()))?;
-            p3.proof_of_secret_key.as_ref().unwrap().verify(&p3.index, &p3.public_key().unwrap(), "Φ").or(Err(()))?;
+            p2.proof_of_secret_key.as_ref().unwrap().verify(&p2.index, p2.public_key().unwrap(), "Φ").or(Err(()))?;
+            p3.proof_of_secret_key.as_ref().unwrap().verify(&p3.index, p3.public_key().unwrap(), "Φ").or(Err(()))?;
 
             let participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p3.clone());
             let (p1_state, _participant_lists) = DistributedKeyGeneration::<RoundOne>::new_initial(&params,
@@ -1128,6 +1128,7 @@ mod test {
 
     #[test]
     fn signing_and_verification_static_2_out_of_3() {
+        #[allow(clippy::type_complexity)]
         fn do_keygen() -> Result<(Parameters, SecretKey, SecretKey, SecretKey, SecretKey, SecretKey, SecretKey, GroupKey), ()> {
             let params = Parameters { n: 3, t: 2 };
             let mut rng = OsRng;
@@ -1136,9 +1137,9 @@ mod test {
             let (dealer2, dealer2coeffs, dealer2_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
             let (dealer3, dealer3coeffs, dealer3_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
 
-            dealer1.proof_of_secret_key.as_ref().unwrap().verify(&dealer1.index, &dealer1.public_key().unwrap(), "Φ").or(Err(()))?;
-            dealer2.proof_of_secret_key.as_ref().unwrap().verify(&dealer2.index, &dealer2.public_key().unwrap(), "Φ").or(Err(()))?;
-            dealer3.proof_of_secret_key.as_ref().unwrap().verify(&dealer3.index, &dealer3.public_key().unwrap(), "Φ").or(Err(()))?;
+            dealer1.proof_of_secret_key.as_ref().unwrap().verify(&dealer1.index, dealer1.public_key().unwrap(), "Φ").or(Err(()))?;
+            dealer2.proof_of_secret_key.as_ref().unwrap().verify(&dealer2.index, dealer2.public_key().unwrap(), "Φ").or(Err(()))?;
+            dealer3.proof_of_secret_key.as_ref().unwrap().verify(&dealer3.index, dealer3.public_key().unwrap(), "Φ").or(Err(()))?;
 
             let dealers: Vec<Participant> = vec!(dealer1.clone(), dealer2.clone(), dealer3.clone());
             let (dealer1_state, _participant_lists) = DistributedKeyGeneration::<RoundOne>::new_initial(&params,
@@ -1329,6 +1330,7 @@ mod test {
 
     #[test]
     fn signing_and_verification_static_2_out_of_3_into_3_out_of_5() {
+        #[allow(clippy::type_complexity)]
         fn do_keygen() -> 
             Result<
                 (
@@ -1353,9 +1355,9 @@ mod test {
             let (dealer2, dealer2coeffs, dealer2_dh_sk) = Participant::new_dealer(&params_dealers, 2, "Φ", &mut rng);
             let (dealer3, dealer3coeffs, dealer3_dh_sk) = Participant::new_dealer(&params_dealers, 3, "Φ", &mut rng);
 
-            dealer1.proof_of_secret_key.as_ref().unwrap().verify(&dealer1.index, &dealer1.public_key().unwrap(), "Φ").or(Err(()))?;
-            dealer2.proof_of_secret_key.as_ref().unwrap().verify(&dealer2.index, &dealer2.public_key().unwrap(), "Φ").or(Err(()))?;
-            dealer3.proof_of_secret_key.as_ref().unwrap().verify(&dealer3.index, &dealer3.public_key().unwrap(), "Φ").or(Err(()))?;
+            dealer1.proof_of_secret_key.as_ref().unwrap().verify(&dealer1.index, dealer1.public_key().unwrap(), "Φ").or(Err(()))?;
+            dealer2.proof_of_secret_key.as_ref().unwrap().verify(&dealer2.index, dealer2.public_key().unwrap(), "Φ").or(Err(()))?;
+            dealer3.proof_of_secret_key.as_ref().unwrap().verify(&dealer3.index, dealer3.public_key().unwrap(), "Φ").or(Err(()))?;
 
             let dealers: Vec<Participant> = vec!(dealer1.clone(), dealer2.clone(), dealer3.clone());
             let (dealer1_state, _participant_lists) = DistributedKeyGeneration::<RoundOne>::new_initial(&params_dealers,
@@ -1612,8 +1614,8 @@ mod test {
             let (p2, p2coeffs, p2_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
             let (p3, p3coeffs, p3_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
 
-            p2.proof_of_secret_key.as_ref().unwrap().verify(&p2.index, &p2.public_key().unwrap(), "Φ").or(Err(()))?;
-            p3.proof_of_secret_key.as_ref().unwrap().verify(&p3.index, &p3.public_key().unwrap(), "Φ").or(Err(()))?;
+            p2.proof_of_secret_key.as_ref().unwrap().verify(&p2.index, p2.public_key().unwrap(), "Φ").or(Err(()))?;
+            p3.proof_of_secret_key.as_ref().unwrap().verify(&p3.index, p3.public_key().unwrap(), "Φ").or(Err(()))?;
 
             let participants: Vec<Participant> = vec!(p1.clone(), p2.clone(), p3.clone());
             let (p1_state, _participant_lists) = DistributedKeyGeneration::<RoundOne>::new_initial(&params,

@@ -242,8 +242,7 @@ fn signing_and_verification_with_ed25519_dalek_2_out_of_3() {
     let public_key_bytes = group_key.to_bytes();
     let public_key = ed25519_dalek::PublicKey::from_bytes(&public_key_bytes[..]);
 
-    if public_key.is_ok() {
-        let pk = public_key.unwrap();
+    if let Ok(pk) = public_key {
         println!("Verifying signature");
         let verified = pk.verify(&message_hash[..], &signature).is_ok();
 
@@ -255,7 +254,6 @@ fn signing_and_verification_with_ed25519_dalek_2_out_of_3() {
             println!("p3 secret key: {:?}", p3_sk);
             println!("p1 secret commitment shares: {:?}", p1_secret_comshares);
             println!("p3 secret commitment shares: {:?}", p3_secret_comshares);
-            assert!(false);
         }
     }
 }
