@@ -15,6 +15,7 @@
 use std::boxed::Box;
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
+use curve25519_dalek::traits::Identity;
 
 use core::cmp::Ordering;
 use core::convert::TryInto;
@@ -267,12 +268,65 @@ pub fn compute_message_hash(context_string: &[u8], message: &[u8]) -> [u8; 64] {
     output
 }
 
-fn compute_binding_factors_and_group_commitment(
+/// Computes the group's binding factor and commitment. The binding factor is common
+/// among all signers. This allows to reduce the number of scalar multiplications
+/// from the number of signers to 1. This optimization comes from the work of Crites,
+/// Komlo and Maller: [How to Prove Schnorr Assuming Schnorr: Security of Multi- and
+/// Threshold Signatures](https://eprint.iacr.org/2021/1375).
+fn compute_binding_factor_and_group_commitment(
     message_hash: &[u8; 64],
     signers: &[Signer],
-) -> (BTreeMap<u32, Scalar>, SignerRs)
+) -> (Scalar, RistrettoPoint)
 {
-	let mut binding_factors: BTreeMap<u32, Scalar> = BTreeMap::new();
+    let mut R = RistrettoPoint::identity();
+    let mut S = RistrettoPoint::identity();
+
+    // [CFRG] Should the hash function be hardcoded in the RFC or should
+    // we instead specify the output/block size?
+    let mut h = Sha512::new();
+
+    // [DIFFERENT_TO_PAPER] I added a context string and reordered to hash
+    // constants like the message first.
+    h.update(b"FROST-SHA512");
+    h.update(&message_hash[..]);
+
+    // [DIFFERENT_TO_PAPER] I added the set of participants (in the paper
+    // B = <(i, D_{ij}, E_(ij))> i \E S) here to avoid rehashing them over and
+    // over again.
+    for signer in signers.iter() {
+        let hiding = signer.published_commitment_share.0;
+        let binding = signer.published_commitment_share.1;
+
+        h.update(signer.participant_index.to_be_bytes());
+        h.update(hiding.compress().as_bytes());
+        h.update(binding.compress().as_bytes());
+    }
+
+    // This is rho in the paper, except that it is common between signers here.
+    let binding_factor = Scalar::from_hash(h);
+
+    for signer in signers.iter() {
+        let hiding = signer.published_commitment_share.0;
+        let binding = signer.published_commitment_share.1;
+
+        R += hiding;
+        S += binding;
+    }
+
+    R += binding_factor * S;
+
+    (binding_factor, R)
+}
+
+
+/// Computes all the signers commitments. This is used by the [`SignatureAggregator`]
+/// for verifying signers [`PartialThresholdSignature`] against their individual public
+/// keys.
+fn compute_individual_commitments(
+    message_hash: &[u8; 64],
+    signers: &[Signer],
+) -> SignerRs
+{
     let mut Rs: SignerRs = SignerRs::new();
 
     // [CFRG] Should the hash function be hardcoded in the RFC or should
@@ -297,25 +351,17 @@ fn compute_binding_factors_and_group_commitment(
         h.update(binding.compress().as_bytes());
     }
 
+    // This is rho in the paper, except that it is common between signers here.
+    let binding_factor = Scalar::from_hash(h);
+
     for signer in signers.iter() {
         let hiding = signer.published_commitment_share.0;
         let binding = signer.published_commitment_share.1;
 
-        let mut h1 = h.clone();
-
-        // [DIFFERENT_TO_PAPER] The participant index is added last
-        // to finish their unique calculation of rho.
-        h1.update(signer.participant_index.to_be_bytes());
-        h1.update(hiding.compress().as_bytes());
-        h1.update(binding.compress().as_bytes());
-
-        let binding_factor = Scalar::from_hash(h1); // This is rho in the paper.
-
-        // THIS IS THE MAGIC STUFF ↓↓↓
         Rs.insert(&signer.participant_index, hiding + (binding_factor * binding));
-	    binding_factors.insert(signer.participant_index, binding_factor);
     }
-    (binding_factors, Rs)
+
+    Rs
 }
 
 fn compute_challenge(message_hash: &[u8; 64], group_key: &GroupKey, R: &RistrettoPoint) -> Scalar {
@@ -404,16 +450,14 @@ impl SecretKey {
             return Err(SignatureError::MissingCommitmentShares);
         }
 
-        let (binding_factors, Rs) = compute_binding_factors_and_group_commitment(message_hash, signers);
-        let R: RistrettoPoint = Rs.values().sum();
+        let (binding_factor, R) = compute_binding_factor_and_group_commitment(message_hash, signers);
         let challenge = compute_challenge(message_hash, group_key, &R);
-        let my_binding_factor = binding_factors.get(&self.index).ok_or(SignatureError::InvalidBindingFactor)?;
         let all_participant_indices: Vec<u32> = signers.iter().map(|x| x.participant_index).collect();
         let lambda: Scalar = calculate_lagrange_coefficients(&self.index, &all_participant_indices)
             .map_err(|e| SignatureError::Custom(e.to_string()))?;
         let my_commitment_share = my_secret_commitment_share_list.commitments[my_commitment_share_index].clone();
         let z = my_commitment_share.hiding.nonce +
-            (my_commitment_share.binding.nonce * my_binding_factor) +
+            (my_commitment_share.binding.nonce * binding_factor) +
             (lambda * self.key * challenge);
 
         // [DIFFERENT_TO_PAPER] We need to instead pass in the commitment
@@ -661,7 +705,7 @@ impl SignatureAggregator<Finalized> {
     pub fn aggregate(&self) -> Result<ThresholdSignature, BTreeMap<u32, &'static str>> {
         let mut misbehaving_participants: BTreeMap<u32, &'static str> = BTreeMap::new();
         
-        let (_, Rs) = compute_binding_factors_and_group_commitment(&self.aggregator.message_hash, &self.state.signers);
+        let Rs = compute_individual_commitments(&self.aggregator.message_hash, &self.state.signers);
         let R: RistrettoPoint = Rs.values().sum();
         let c = compute_challenge(&self.aggregator.message_hash, &self.state.group_key, &R);
         let all_participant_indices: Vec<u32> = self.state.signers.iter().map(|x| x.participant_index).collect();
