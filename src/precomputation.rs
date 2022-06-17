@@ -169,7 +169,7 @@ impl CommitmentShare {
 
 /// A secret commitment share list, containing the revealed nonces for the
 /// hiding and binding commitments.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SecretCommitmentShareList {
     /// The secret commitment shares.
     pub commitments: Vec<CommitmentShare>,

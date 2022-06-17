@@ -404,7 +404,7 @@ mod sign_benches {
         let message = b"This is a test of the tsunami alert system. This is only a test.";
 
         let mut participants_public_comshares = Vec::<PublicCommitmentShareList>::with_capacity(NUMBER_OF_PARTICIPANTS as usize);
-        let (p1_public_comshares, mut p1_secret_comshares) = generate_commitment_share_lists(&mut OsRng, 1, 1);
+        let (p1_public_comshares, p1_secret_comshares) = generate_commitment_share_lists(&mut OsRng, 1, 1);
         participants_public_comshares.push(p1_public_comshares);
 
         for i in 2..NUMBER_OF_PARTICIPANTS+1 {
@@ -422,7 +422,7 @@ mod sign_benches {
         let message_hash = compute_message_hash(&context[..], &message[..]);
 
         c.bench_function("Partial signature creation", move |b| {
-            b.iter(|| participants_secret_keys[0].sign(&message_hash, &group_key, &mut p1_secret_comshares, 0, signers));
+            b.iter(|| participants_secret_keys[0].sign(&message_hash, &group_key, &mut p1_secret_comshares.clone(), 0, signers));
         });
     }
 
