@@ -363,6 +363,40 @@ mod test {
     }
 
     #[test]
+    fn test_serialisation() {
+        let mut rng = OsRng;
+
+        for _ in 0..100 {
+            let nonce = Scalar::random(&mut rng);
+            let sealed = &nonce * &curve25519_dalek::constants::RISTRETTO_BASEPOINT_TABLE;
+            let commitment = Commitment { nonce, sealed };
+
+            let bytes = commitment.to_bytes();
+            assert!(Commitment::from_bytes(&bytes).is_ok());
+            assert_eq!(commitment, Commitment::from_bytes(&bytes).unwrap());
+        }
+
+        for _ in 0..100 {
+            let nonce = Scalar::random(&mut rng);
+            let sealed = &nonce * &curve25519_dalek::constants::RISTRETTO_BASEPOINT_TABLE;
+            let binding = Commitment { nonce, sealed };
+            let hiding = binding.clone();
+            let commitment_share = CommitmentShare { binding, hiding };
+
+            let bytes = commitment_share.to_bytes();
+            assert!(CommitmentShare::from_bytes(&bytes).is_ok());
+            assert_eq!(commitment_share, CommitmentShare::from_bytes(&bytes).unwrap());
+        }
+
+        // invalid encodings
+        let bytes = [255u8; 64];
+        assert!(Commitment::from_bytes(&bytes).is_err());
+
+        let bytes = [255u8; 128];
+        assert!(CommitmentShare::from_bytes(&bytes).is_err());
+    }
+
+    #[test]
     fn commitment_share_list_generate() {
         let (public_share_list, secret_share_list) = generate_commitment_share_lists(&mut OsRng, 0, 5);
 

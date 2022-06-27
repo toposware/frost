@@ -114,3 +114,23 @@ impl NizkOfSecretKey {
         Ok(NizkOfSecretKey { s, r })
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use rand::rngs::OsRng;
+
+    #[test]
+    fn test_serialization() {
+        let mut rng = OsRng;
+
+        for _ in 0..100 {
+            let nizk = NizkOfSecretKey {
+                s: Scalar::random(&mut rng),
+                r: Scalar::random(&mut rng),
+            };
+            let bytes = nizk.to_bytes();
+            assert_eq!(nizk, NizkOfSecretKey::from_bytes(&bytes).unwrap());
+        }
+    }
+}
