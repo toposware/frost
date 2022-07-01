@@ -231,8 +231,6 @@ impl $type {
 
 /// A struct for storing signers' R values with the signer's participant index.
 //
-// I hate this so much.
-//
 // XXX TODO there might be a more efficient way to optimise this data structure
 //     and its algorithms?
 #[derive(Debug)]
@@ -279,12 +277,13 @@ fn compute_binding_factors_and_group_commitment(
     // we instead specify the output/block size?
     let mut h = Sha512::new();
 
-    // [DIFFERENT_TO_PAPER] I added a context string and reordered to hash
-    // constants like the message first.
+    // [DIFFERENT_TO_PAPER] We use a context string for computing the binding
+    // factor. The message is then hashed first, which does not match the order
+    // in the paper.
     h.update(b"FROST-SHA512");
     h.update(&message_hash[..]);
 
-    // [DIFFERENT_TO_PAPER] I added the set of participants (in the paper
+    // [DIFFERENT_TO_PAPER] We add the set of participants (in the paper
     // B = <(i, D_{ij}, E_(ij))> i \E S) here to avoid rehashing them over and
     // over again.
     for signer in signers.iter() {
@@ -302,8 +301,8 @@ fn compute_binding_factors_and_group_commitment(
 
         let mut h1 = h.clone();
 
-        // [DIFFERENT_TO_PAPER] I put in the participant index last to finish
-        // their unique calculation of rho.
+        // [DIFFERENT_TO_PAPER] The participant index is added last
+        // to finish their unique calculation of rho.
         h1.update(signer.participant_index.to_be_bytes());
         h1.update(hiding.compress().as_bytes());
         h1.update(binding.compress().as_bytes());
@@ -392,7 +391,7 @@ impl SecretKey {
         &self,
         message_hash: &[u8; 64],
         group_key: &GroupKey,
-        // XXX [PAPER] I don't know that we can guarantee simultaneous runs of the protocol
+        // XXX TODO [PAPER] Can we guarantee simultaneous runs of the protocol
         // with these nonces being potentially reused?
         my_secret_commitment_share_list: &mut SecretCommitmentShareList,
         my_commitment_share_index: usize,

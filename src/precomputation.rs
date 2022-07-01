@@ -314,8 +314,7 @@ impl SecretCommitmentShareList {
         // This is not constant-time in that the number of commitment shares in
         // the list may be discovered via side channel, as well as the index of
         // share to be deleted, as well as whether or not the share was in the
-        // list, but none of this gives any adversary that I can think of any
-        // advantage.
+        // list, but none of this should give any adversary any advantage.
         for (i, s) in self.commitments.iter().enumerate() {
             if s.ct_eq(&share).into() {
                 index = i as isize;

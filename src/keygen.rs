@@ -26,8 +26,8 @@
 //!            polynomial \\(f\_i\(x\) = \sum\_{j=0}^{t-1} a\_{ij} x^{j}\\) of degree \\( t-1 \\) over
 //!            \\(\mathbb{Z}\_q\\).
 //!
-//! (Yes, I know the steps are out-of-order. These are the step numbers as given in the paper.  I do them
-//! out-of-order because it saves one scalar multiplication.)
+//! These step numbers are given as written in the paper. They are executed in a different order to
+//! save one scalar multiplication.
 //!
 //! * Step #3: Every participant \\(P\_i\\) computes a public commitment
 //!            \\(C\_i = \[\phi\_{i0}, \\dots, \phi\_{i(t-1)}\]\\), where \\(\phi\_{ij} = g^{a\_{ij}}\\),
@@ -961,7 +961,7 @@ impl Participant {
                 commitments.points.push(&coefficients.0[j] * &RISTRETTO_BASEPOINT_TABLE);
             }
 
-            // Yes, I know the steps are out of order.  It saves one scalar multiplication.
+            // The steps are out of order, in order to save one scalar multiplication.
 
             // Step 2: Every dealer computes a proof of knowledge to the corresponding secret
             //         a_{i0} by calculating a Schnorr signature \alpha_i = (s, R).  (In
