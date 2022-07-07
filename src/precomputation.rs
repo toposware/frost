@@ -105,14 +105,15 @@ impl Commitment {
 
     /// Deserialise this array of bytes to a `Commitment`
     pub fn from_bytes(bytes: &[u8; 64]) -> Result<Commitment, Error> {
-        let mut array = [0u8; 32];
-        array.copy_from_slice(&bytes[0..32]);
-        let nonce = Scalar::from_canonical_bytes(array).ok_or(Error::SerialisationError)?;
+        let nonce = Scalar::from_canonical_bytes(bytes[0..32]
+            .try_into()
+            .map_err(|_| Error::SerialisationError)?
+        ).ok_or(Error::SerialisationError)?;
 
-        array.copy_from_slice(&bytes[32..64]);
-        let sealed = CompressedRistretto(array)
-            .decompress()
-            .ok_or(Error::SerialisationError)?;
+        let sealed = CompressedRistretto(bytes[32..64]
+            .try_into()
+            .map_err(|_| Error::SerialisationError)?
+        ).decompress().ok_or(Error::SerialisationError)?;
 
         Ok(Commitment { nonce, sealed })
     }
@@ -156,12 +157,15 @@ impl CommitmentShare {
 
     /// Deserialise this array of bytes to a `CommitmentShare`
     pub fn from_bytes(bytes: &[u8; 128]) -> Result<CommitmentShare, Error> {
-        let mut array = [0u8; 64];
-        array.copy_from_slice(&bytes[0..64]);
-        let hiding = Commitment::from_bytes(&array)?;
+        let hiding = Commitment::from_bytes(&bytes[0..64]
+            .try_into()
+            .map_err(|_| Error::SerialisationError)?
+        )?;
 
-        array.copy_from_slice(&bytes[64..128]);
-        let binding = Commitment::from_bytes(&array)?;
+        let binding = Commitment::from_bytes(&bytes[64..128]
+            .try_into()
+            .map_err(|_| Error::SerialisationError)?
+        )?;
 
         Ok(CommitmentShare { hiding, binding })
     }
@@ -331,25 +335,6 @@ impl SecretCommitmentShareList {
 mod test {
     use super::*;
     use rand::rngs::OsRng;
-
-    #[test]
-    fn test_commitment_serialization() {
-        let mut rng = OsRng;
-
-        for _ in 0..100 {
-            let nonce = Scalar::random(&mut rng);
-            let sealed = &nonce * &curve25519_dalek::constants::RISTRETTO_BASEPOINT_TABLE;
-
-            let hiding = Commitment { nonce, sealed };
-            let bytes = hiding.to_bytes();
-            assert_eq!(hiding, Commitment::from_bytes(&bytes).unwrap());
-
-            let binding = hiding.clone();
-            let commitment_share = CommitmentShare { binding, hiding };
-            let bytes = commitment_share.to_bytes();
-            assert_eq!(commitment_share, CommitmentShare::from_bytes(&bytes).unwrap());
-        }
-    }
 
     #[test]
     fn nonce_pair() {

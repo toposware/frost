@@ -143,16 +143,17 @@ impl PartialThresholdSignature {
     }
 
     /// Attempt to deserialize a partial threshold signature from an array of 36 bytes.
-    pub fn from_bytes(bytes: [u8; 36]) -> Result<PartialThresholdSignature, Error> {
+    pub fn from_bytes(bytes: &[u8; 36]) -> Result<PartialThresholdSignature, Error> {
         let index = u32::from_le_bytes(
             bytes[0..4]
                 .try_into()
                 .map_err(|_| Error::SerialisationError)?
         );
 
-        let mut array = [0u8; 32];
-        array.copy_from_slice(&bytes[4..36]);
-        let z = Scalar::from_canonical_bytes(array).ok_or(Error::SerialisationError)?;
+        let z = Scalar::from_canonical_bytes(bytes[4..36]
+            .try_into()
+            .map_err(|_| Error::SerialisationError)?
+        ).ok_or(Error::SerialisationError)?;
 
         Ok(PartialThresholdSignature { index, z })
     }
@@ -176,16 +177,17 @@ impl ThresholdSignature {
     }
 
     /// Attempt to deserialize a threshold signature from an array of 64 bytes.
-    pub fn from_bytes(bytes: [u8; 64]) -> Result<ThresholdSignature, Error> {
-        let mut array = [0u8; 32];
+    pub fn from_bytes(bytes: &[u8; 64]) -> Result<ThresholdSignature, Error> {
+        let R = CompressedRistretto(bytes[0..32]
+            .try_into()
+            .map_err(|_| Error::SerialisationError)?
+        ).decompress().ok_or(Error::SerialisationError)?;
 
-        array.copy_from_slice(&bytes[..32]);
-
-        let R = CompressedRistretto(array).decompress().ok_or(Error::SerialisationError)?;
-
-        array.copy_from_slice(&bytes[32..]);
-
-        let z = Scalar::from_canonical_bytes(array).ok_or(Error::SerialisationError)?;
+        let z = Scalar::from_canonical_bytes(
+            bytes[32..64]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?
+        ).ok_or(Error::SerialisationError)?;
 
         Ok(ThresholdSignature { R, z })
     }
@@ -1698,7 +1700,7 @@ mod test {
         assert_eq!(p1_public_comshares, PublicCommitmentShareList::from_bytes(&bytes).unwrap());
 
         let bytes = p1_partial.to_bytes();
-        assert_eq!(p1_partial, PartialThresholdSignature::from_bytes(bytes).unwrap());
+        assert_eq!(p1_partial, PartialThresholdSignature::from_bytes(&bytes).unwrap());
 
         // Continue signature
 
@@ -1720,7 +1722,7 @@ mod test {
         // Check serialisation
 
         let bytes = threshold_signature.to_bytes();
-        assert_eq!(threshold_signature, ThresholdSignature::from_bytes(bytes).unwrap());
+        assert_eq!(threshold_signature, ThresholdSignature::from_bytes(&bytes).unwrap());
 
     }
 }

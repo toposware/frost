@@ -35,14 +35,14 @@ impl Parameters {
     }
 
     /// Deserialise this slice of bytes to `Parameters`
-    pub fn from_bytes(bytes: &[u8]) -> Result<Parameters, Error> {
+    pub fn from_bytes(bytes: &[u8; 8]) -> Result<Parameters, Error> {
         let n = u32::from_le_bytes(
             bytes[..4]
                 .try_into()
                 .map_err(|_| Error::SerialisationError)?,
         );
         let t = u32::from_le_bytes(
-            bytes[4..]
+            bytes[4..8]
                 .try_into()
                 .map_err(|_| Error::SerialisationError)?,
         );
@@ -67,9 +67,5 @@ mod test {
             assert_eq!(params, Parameters::from_bytes(&bytes).unwrap());
 
         }
-
-        let params = Parameters { n: rng.next_u32(), t: rng.next_u32() };
-        let bytes = params.to_bytes();
-        assert!(Parameters::from_bytes(&bytes[..6]).is_err());
     }
 }

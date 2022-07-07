@@ -758,11 +758,8 @@ impl DHPrivateKey {
     }
 
     /// Deserialise this slice of bytes to a `DHPrivateKey`
-    pub fn from_bytes(bytes: &[u8]) -> Result<DHPrivateKey, Error> {
-        let mut array = [0u8; 32];
-        array.copy_from_slice(&bytes[..32]);
-
-        let scalar = Scalar::from_canonical_bytes(array)
+    pub fn from_bytes(bytes: &[u8; 32]) -> Result<DHPrivateKey, Error> {
+        let scalar = Scalar::from_canonical_bytes(*bytes)
             .ok_or(Error::SerialisationError)?;
 
         Ok(DHPrivateKey(scalar))
@@ -788,10 +785,8 @@ impl DHPublicKey {
     }
 
     /// Deserialise this slice of bytes to a `DHPublicKey`
-    pub fn from_bytes(bytes: &[u8]) -> Result<DHPublicKey, Error> {
-        let mut array = [0u8; 32];
-        array.copy_from_slice(&bytes[..32]);
-        let key = CompressedRistretto(array)
+    pub fn from_bytes(bytes: &[u8; 32]) -> Result<DHPublicKey, Error> {
+        let key = CompressedRistretto(*bytes)
             .decompress()
             .ok_or(Error::SerialisationError)?;
 
@@ -1108,7 +1103,11 @@ impl Participant {
         let proof_of_secret_key = match bytes[index_slice] {
             1u8 => {
                 index_slice += 1;
-                Some(NizkOfSecretKey::from_bytes(&bytes[index_slice..index_slice + 64])?)
+                Some(NizkOfSecretKey::from_bytes(
+                    &bytes[index_slice..index_slice+64]
+                        .try_into()
+                        .map_err(|_| Error::SerialisationError)?
+                )?)
             },
             0u8 => {
                 index_slice += 1;
@@ -1118,7 +1117,11 @@ impl Participant {
         };
 
         let proof_of_dh_private_key =
-            NizkOfSecretKey::from_bytes(&bytes[index_slice + 64..index_slice + 128])?;
+            NizkOfSecretKey::from_bytes(
+                &bytes[index_slice..index_slice+64]
+                    .try_into()
+                    .map_err(|_| Error::SerialisationError)?
+            )?;
 
         Ok(Participant {
             index,
@@ -1319,7 +1322,11 @@ impl ActualState {
                     .try_into()
                     .map_err(|_| Error::SerialisationError)?,
             );
-            let key = DHPublicKey::from_bytes(&bytes[index_slice+4..index_slice+36])?;
+            let key = DHPublicKey::from_bytes(
+                &bytes[index_slice+4..index_slice+36]
+                    .try_into()
+                    .map_err(|_| Error::SerialisationError)?
+            )?;
             their_dh_public_keys.push((index, key));
             index_slice += 36;
         }
@@ -1337,7 +1344,11 @@ impl ActualState {
         
                 index_slice += 4;
                 for _ in 0..shares_len {
-                    let share = EncryptedSecretShare::from_bytes(&bytes[index_slice..index_slice+56])?;
+                    let share = EncryptedSecretShare::from_bytes(
+                        &bytes[index_slice..index_slice+56]
+                            .try_into()
+                            .map_err(|_| Error::SerialisationError)?
+                    )?;
                     encrypted_shares.push(share);
                     index_slice += 56;
                 }
@@ -1364,7 +1375,11 @@ impl ActualState {
         
                 index_slice += 4;
                 for _ in 0..shares_len {
-                    let share = SecretShare::from_bytes(&bytes[index_slice..index_slice+40])?;
+                    let share = SecretShare::from_bytes(
+                        &bytes[index_slice..index_slice+40]
+                            .try_into()
+                            .map_err(|_| Error::SerialisationError)?
+                    )?;
                     shares.push(share);
                     index_slice += 40;
                 }
@@ -1898,7 +1913,7 @@ impl SecretShare {
     }
 
     /// Deserialise this slice of bytes to a `SecretShare`
-    pub fn from_bytes(bytes: &[u8]) -> Result<SecretShare, Error> {
+    pub fn from_bytes(bytes: &[u8; 40]) -> Result<SecretShare, Error> {
         let sender_index = u32::from_le_bytes(
             bytes[0..4]
                 .try_into()
@@ -1911,10 +1926,11 @@ impl SecretShare {
                 .map_err(|_| Error::SerialisationError)?,
         );
 
-        let mut array = [0u8; 32];
-        array.copy_from_slice(&bytes[8..40]);
-        let polynomial_evaluation = Scalar::from_canonical_bytes(array)
-                .ok_or(Error::SerialisationError)?;
+        let polynomial_evaluation = Scalar::from_canonical_bytes(
+            bytes[8..40]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?
+            ).ok_or(Error::SerialisationError)?;
 
         Ok(SecretShare {
             sender_index,
@@ -1952,7 +1968,7 @@ impl EncryptedSecretShare {
     }
 
     /// Deserialise this slice of bytes to a `EncryptedSecretShare`
-    pub fn from_bytes(bytes: &[u8]) -> Result<EncryptedSecretShare, Error> {
+    pub fn from_bytes(bytes: &[u8; 56]) -> Result<EncryptedSecretShare, Error> {
         let sender_index = u32::from_le_bytes(
             bytes[0..4]
                 .try_into()
@@ -2002,7 +2018,7 @@ impl ComplaintProof {
     }
 
     /// Deserialise this slice of bytes to a `ComplaintProof`
-    pub fn from_bytes(bytes: &[u8]) -> Result<ComplaintProof, Error> {
+    pub fn from_bytes(bytes: &[u8; 96]) -> Result<ComplaintProof, Error> {
         let mut array = [0u8; 32];
         array.copy_from_slice(&bytes[0..32]);
         let a1 = CompressedRistretto(array)
@@ -2080,7 +2096,7 @@ impl Complaint {
     }
 
     /// Deserialise this slice of bytes to a `Complaint`
-    pub fn from_bytes(bytes: &[u8]) -> Result<Complaint, Error> {
+    pub fn from_bytes(bytes: &[u8; 136]) -> Result<Complaint, Error> {
         let maker_index = u32::from_le_bytes(
             bytes[0..4]
                 .try_into()
@@ -2094,7 +2110,8 @@ impl Complaint {
         let dh_key = bytes[8..40]
             .try_into()
             .map_err(|_| Error::SerialisationError)?;
-        let proof = ComplaintProof::from_bytes(&bytes[40..136])?;
+        let proof = ComplaintProof::from_bytes(
+            &bytes[40..136].try_into().map_err(|_| Error::SerialisationError)?)?;
 
         Ok(Complaint {
             maker_index,
@@ -2394,18 +2411,18 @@ impl IndividualPublicKey {
     }
 
     /// Deserialise this individual public key from an array of bytes.
-    pub fn from_bytes(bytes: [u8; 36]) -> Result<IndividualPublicKey, Error> {
+    pub fn from_bytes(bytes: &[u8; 36]) -> Result<IndividualPublicKey, Error> {
         let index = u32::from_le_bytes(
             bytes[0..4]
                 .try_into()
                 .map_err(|_| Error::SerialisationError)?,
         );
 
-        let mut array = [0u8; 32];
-        array.copy_from_slice(&bytes[4..36]);
-        let share = CompressedRistretto(array)
-            .decompress()
-            .ok_or(Error::SerialisationError)?;
+        let share = CompressedRistretto(
+            bytes[4..36]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?
+        ).decompress().ok_or(Error::SerialisationError)?;
 
         Ok(IndividualPublicKey { index, share })
     }
@@ -2442,17 +2459,17 @@ impl SecretKey {
     }
 
     /// Deserialise this secret key from an array of bytes.
-    pub fn from_bytes(bytes: [u8; 36]) -> Result<SecretKey, Error> {
+    pub fn from_bytes(bytes: &[u8; 36]) -> Result<SecretKey, Error> {
         let index = u32::from_le_bytes(
             bytes[0..4]
                 .try_into()
                 .map_err(|_| Error::SerialisationError)?,
         );
 
-        let mut array = [0u8; 32];
-        array.copy_from_slice(&bytes[4..36]);
-        let key = Scalar::from_canonical_bytes(array)
-            .ok_or(Error::SerialisationError)?;
+        let key = Scalar::from_canonical_bytes(bytes[4..36]
+            .try_into()
+            .map_err(|_| Error::SerialisationError)?
+        ).ok_or(Error::SerialisationError)?;
 
         Ok(SecretKey { index, key })
     }
@@ -2481,8 +2498,8 @@ impl GroupKey {
     }
 
     /// Deserialise this group public key from an array of bytes.
-    pub fn from_bytes(bytes: [u8; 32]) -> Result<GroupKey, Error> {
-        let point = CompressedRistretto(bytes).decompress().ok_or(Error::SerialisationError)?;
+    pub fn from_bytes(bytes: &[u8; 32]) -> Result<GroupKey, Error> {
+        let point = CompressedRistretto(*bytes).decompress().ok_or(Error::SerialisationError)?;
 
         Ok(GroupKey(point))
     }
@@ -3417,7 +3434,7 @@ mod test {
 
                 // Check serialisation
                 let bytes = p1_group_key.to_bytes();
-                assert_eq!(p1_group_key, GroupKey::from_bytes(bytes).unwrap());
+                assert_eq!(p1_group_key, GroupKey::from_bytes(&bytes).unwrap());
 
                 let bytes = p1_state.to_bytes();
                 assert_eq!(*p1_state.state, *DistributedKeyGeneration::<RoundTwo>::from_bytes(&bytes).unwrap().state);
