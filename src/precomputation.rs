@@ -104,15 +104,16 @@ impl Commitment {
     }
 
     /// Deserialise this array of bytes to a `Commitment`
-    pub fn from_bytes(bytes: [u8; 64]) -> Result<Commitment, Error> {
-        let mut array = [0u8; 32];
-        array.copy_from_slice(&bytes[0..32]);
-        let nonce = Scalar::from_canonical_bytes(array).ok_or(Error::SerialisationError)?;
+    pub fn from_bytes(bytes: &[u8; 64]) -> Result<Commitment, Error> {
+        let nonce = Scalar::from_canonical_bytes(bytes[0..32]
+            .try_into()
+            .map_err(|_| Error::SerialisationError)?
+        ).ok_or(Error::SerialisationError)?;
 
-        array.copy_from_slice(&bytes[32..64]);
-        let sealed = CompressedRistretto(array)
-            .decompress()
-            .ok_or(Error::SerialisationError)?;
+        let sealed = CompressedRistretto(bytes[32..64]
+            .try_into()
+            .map_err(|_| Error::SerialisationError)?
+        ).decompress().ok_or(Error::SerialisationError)?;
 
         Ok(Commitment { nonce, sealed })
     }
@@ -155,13 +156,16 @@ impl CommitmentShare {
     }
 
     /// Deserialise this array of bytes to a `CommitmentShare`
-    pub fn from_bytes(bytes: [u8; 128]) -> Result<CommitmentShare, Error> {
-        let mut array = [0u8; 64];
-        array.copy_from_slice(&bytes[0..64]);
-        let hiding = Commitment::from_bytes(array)?;
+    pub fn from_bytes(bytes: &[u8; 128]) -> Result<CommitmentShare, Error> {
+        let hiding = Commitment::from_bytes(&bytes[0..64]
+            .try_into()
+            .map_err(|_| Error::SerialisationError)?
+        )?;
 
-        array.copy_from_slice(&bytes[64..128]);
-        let binding = Commitment::from_bytes(array)?;
+        let binding = Commitment::from_bytes(&bytes[64..128]
+            .try_into()
+            .map_err(|_| Error::SerialisationError)?
+        )?;
 
         Ok(CommitmentShare { hiding, binding })
     }
@@ -202,7 +206,7 @@ impl SecretCommitmentShareList {
 
         for _ in 0..len {
             array.copy_from_slice(&bytes[index_slice..index_slice + 128]);
-            commitments.push(CommitmentShare::from_bytes(array)?);
+            commitments.push(CommitmentShare::from_bytes(&array)?);
             index_slice += 128;
         }
         Ok(SecretCommitmentShareList { commitments })
@@ -314,8 +318,7 @@ impl SecretCommitmentShareList {
         // This is not constant-time in that the number of commitment shares in
         // the list may be discovered via side channel, as well as the index of
         // share to be deleted, as well as whether or not the share was in the
-        // list, but none of this gives any adversary that I can think of any
-        // advantage.
+        // list, but none of this should give any adversary any advantage.
         for (i, s) in self.commitments.iter().enumerate() {
             if s.ct_eq(&share).into() {
                 index = i as isize;
@@ -331,7 +334,6 @@ impl SecretCommitmentShareList {
 #[cfg(test)]
 mod test {
     use super::*;
-
     use rand::rngs::OsRng;
 
     #[test]
@@ -342,6 +344,40 @@ mod test {
     #[test]
     fn nonce_pair_into_commitment_share() {
         let _commitment_share: CommitmentShare = NoncePair::new(&mut OsRng).into();
+    }
+
+    #[test]
+    fn test_serialisation() {
+        let mut rng = OsRng;
+
+        for _ in 0..100 {
+            let nonce = Scalar::random(&mut rng);
+            let sealed = &nonce * &curve25519_dalek::constants::RISTRETTO_BASEPOINT_TABLE;
+            let commitment = Commitment { nonce, sealed };
+
+            let bytes = commitment.to_bytes();
+            assert!(Commitment::from_bytes(&bytes).is_ok());
+            assert_eq!(commitment, Commitment::from_bytes(&bytes).unwrap());
+        }
+
+        for _ in 0..100 {
+            let nonce = Scalar::random(&mut rng);
+            let sealed = &nonce * &curve25519_dalek::constants::RISTRETTO_BASEPOINT_TABLE;
+            let binding = Commitment { nonce, sealed };
+            let hiding = binding.clone();
+            let commitment_share = CommitmentShare { binding, hiding };
+
+            let bytes = commitment_share.to_bytes();
+            assert!(CommitmentShare::from_bytes(&bytes).is_ok());
+            assert_eq!(commitment_share, CommitmentShare::from_bytes(&bytes).unwrap());
+        }
+
+        // invalid encodings
+        let bytes = [255u8; 64];
+        assert!(Commitment::from_bytes(&bytes).is_err());
+
+        let bytes = [255u8; 128];
+        assert!(CommitmentShare::from_bytes(&bytes).is_err());
     }
 
     #[test]

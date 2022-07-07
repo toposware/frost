@@ -101,16 +101,39 @@ impl NizkOfSecretKey {
     }
 
     /// Deserialise this slice of bytes to a NiZK proof
-    pub fn from_bytes(bytes: &[u8]) -> Result<NizkOfSecretKey, Error> {
-        let mut array = [0u8; 32];
-        array.copy_from_slice(&bytes[0..32]);
-        let s = Scalar::from_canonical_bytes(array)
-                .ok_or(Error::SerialisationError)?;
+    pub fn from_bytes(bytes: &[u8; 64]) -> Result<NizkOfSecretKey, Error> {
+        let s = Scalar::from_canonical_bytes(
+            bytes[0..32]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?
+        ).ok_or(Error::SerialisationError)?;
 
-        array.copy_from_slice(&bytes[32..64]);
-        let r = Scalar::from_canonical_bytes(array)
-                .ok_or(Error::SerialisationError)?;
+        let r = Scalar::from_canonical_bytes(
+            bytes[32..64]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?
+        ).ok_or(Error::SerialisationError)?;
 
         Ok(NizkOfSecretKey { s, r })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use rand::rngs::OsRng;
+
+    #[test]
+    fn test_serialization() {
+        let mut rng = OsRng;
+
+        for _ in 0..100 {
+            let nizk = NizkOfSecretKey {
+                s: Scalar::random(&mut rng),
+                r: Scalar::random(&mut rng),
+            };
+            let bytes = nizk.to_bytes();
+            assert_eq!(nizk, NizkOfSecretKey::from_bytes(&bytes).unwrap());
+        }
     }
 }

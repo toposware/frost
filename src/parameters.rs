@@ -35,9 +35,9 @@ impl Parameters {
     }
 
     /// Deserialise this slice of bytes to `Parameters`
-    pub fn from_bytes(bytes: &[u8]) -> Result<Parameters, Error> {
+    pub fn from_bytes(bytes: &[u8; 8]) -> Result<Parameters, Error> {
         let n = u32::from_le_bytes(
-            bytes[0..4]
+            bytes[..4]
                 .try_into()
                 .map_err(|_| Error::SerialisationError)?,
         );
@@ -48,5 +48,24 @@ impl Parameters {
         );
 
         Ok(Parameters { n, t })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use rand::{rngs::OsRng, RngCore};
+
+    #[test]
+    fn test_serialisation() {
+        let mut rng = OsRng;
+
+        for _ in 0..100 {
+            let params = Parameters { n: rng.next_u32(), t: rng.next_u32() };
+            let bytes = params.to_bytes();
+            assert!(Parameters::from_bytes(&bytes).is_ok());
+            assert_eq!(params, Parameters::from_bytes(&bytes).unwrap());
+
+        }
     }
 }
