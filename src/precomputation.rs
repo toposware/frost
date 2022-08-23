@@ -88,8 +88,7 @@ impl Drop for Commitment {
 /// Test equality in constant-time.
 impl ConstantTimeEq for Commitment {
     fn ct_eq(&self, other: &Commitment) -> Choice {
-        self.nonce.ct_eq(&other.nonce) &
-            self.sealed.compress().ct_eq(&other.sealed.compress())
+        self.nonce.ct_eq(&other.nonce) & self.sealed.compress().ct_eq(&other.sealed.compress())
     }
 }
 
@@ -105,15 +104,20 @@ impl Commitment {
 
     /// Deserialise this array of bytes to a `Commitment`
     pub fn from_bytes(bytes: &[u8; 64]) -> Result<Commitment, Error> {
-        let nonce = Scalar::from_canonical_bytes(bytes[0..32]
-            .try_into()
-            .map_err(|_| Error::SerialisationError)?
-        ).ok_or(Error::SerialisationError)?;
+        let nonce = Scalar::from_canonical_bytes(
+            bytes[0..32]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?,
+        )
+        .ok_or(Error::SerialisationError)?;
 
-        let sealed = CompressedRistretto(bytes[32..64]
-            .try_into()
-            .map_err(|_| Error::SerialisationError)?
-        ).decompress().ok_or(Error::SerialisationError)?;
+        let sealed = CompressedRistretto(
+            bytes[32..64]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?,
+        )
+        .decompress()
+        .ok_or(Error::SerialisationError)?;
 
         Ok(Commitment { nonce, sealed })
     }
@@ -157,14 +161,16 @@ impl CommitmentShare {
 
     /// Deserialise this array of bytes to a `CommitmentShare`
     pub fn from_bytes(bytes: &[u8; 128]) -> Result<CommitmentShare, Error> {
-        let hiding = Commitment::from_bytes(&bytes[0..64]
-            .try_into()
-            .map_err(|_| Error::SerialisationError)?
+        let hiding = Commitment::from_bytes(
+            &bytes[0..64]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?,
         )?;
 
-        let binding = Commitment::from_bytes(&bytes[64..128]
-            .try_into()
-            .map_err(|_| Error::SerialisationError)?
+        let binding = Commitment::from_bytes(
+            &bytes[64..128]
+                .try_into()
+                .map_err(|_| Error::SerialisationError)?,
         )?;
 
         Ok(CommitmentShare { hiding, binding })
@@ -254,16 +260,24 @@ impl PublicCommitmentShareList {
                 .try_into()
                 .map_err(|_| Error::SerialisationError)?,
         );
-        let mut commitments: Vec<(RistrettoPoint, RistrettoPoint)> = Vec::with_capacity(len as usize);
+        let mut commitments: Vec<(RistrettoPoint, RistrettoPoint)> =
+            Vec::with_capacity(len as usize);
         let mut index_slice = 8;
         let mut array = [0u8; 32];
 
         for _ in 0..len {
             array.copy_from_slice(&bytes[index_slice..index_slice + 32]);
-            let point1 = CompressedRistretto(array).decompress().ok_or(Error::SerialisationError)?;
+            let point1 = CompressedRistretto(array)
+                .decompress()
+                .ok_or(Error::SerialisationError)?;
             array.copy_from_slice(&bytes[index_slice + 32..index_slice + 64]);
 
-            commitments.push((point1, CompressedRistretto(array).decompress().ok_or(Error::SerialisationError)?));
+            commitments.push((
+                point1,
+                CompressedRistretto(array)
+                    .decompress()
+                    .ok_or(Error::SerialisationError)?,
+            ));
             index_slice += 64;
         }
         Ok(PublicCommitmentShareList {
@@ -288,8 +302,7 @@ pub fn generate_commitment_share_lists(
     mut csprng: impl CryptoRng + Rng,
     participant_index: u32,
     number_of_shares: usize,
-) -> (PublicCommitmentShareList, SecretCommitmentShareList)
-{
+) -> (PublicCommitmentShareList, SecretCommitmentShareList) {
     let mut commitments: Vec<CommitmentShare> = Vec::with_capacity(number_of_shares);
 
     for _ in 0..number_of_shares {
@@ -302,8 +315,13 @@ pub fn generate_commitment_share_lists(
         published.push(commitment.publish());
     }
 
-    (PublicCommitmentShareList { participant_index, commitments: published },
-     SecretCommitmentShareList { commitments })
+    (
+        PublicCommitmentShareList {
+            participant_index,
+            commitments: published,
+        },
+        SecretCommitmentShareList { commitments },
+    )
 }
 
 // XXX TODO This should maybe be a field on SecretKey with some sort of
@@ -369,7 +387,10 @@ mod test {
 
             let bytes = commitment_share.to_bytes();
             assert!(CommitmentShare::from_bytes(&bytes).is_ok());
-            assert_eq!(commitment_share, CommitmentShare::from_bytes(&bytes).unwrap());
+            assert_eq!(
+                commitment_share,
+                CommitmentShare::from_bytes(&bytes).unwrap()
+            );
         }
 
         // invalid encodings
@@ -382,15 +403,20 @@ mod test {
 
     #[test]
     fn commitment_share_list_generate() {
-        let (public_share_list, secret_share_list) = generate_commitment_share_lists(&mut OsRng, 0, 5);
+        let (public_share_list, secret_share_list) =
+            generate_commitment_share_lists(&mut OsRng, 0, 5);
 
-        assert_eq!(public_share_list.commitments[0].0.compress(),
-                   (&secret_share_list.commitments[0].hiding.nonce * &RISTRETTO_BASEPOINT_TABLE).compress());
+        assert_eq!(
+            public_share_list.commitments[0].0.compress(),
+            (&secret_share_list.commitments[0].hiding.nonce * &RISTRETTO_BASEPOINT_TABLE)
+                .compress()
+        );
     }
 
     #[test]
     fn drop_used_commitment_shares() {
-        let (_public_share_list, mut secret_share_list) = generate_commitment_share_lists(&mut OsRng, 3, 8);
+        let (_public_share_list, mut secret_share_list) =
+            generate_commitment_share_lists(&mut OsRng, 3, 8);
 
         assert!(secret_share_list.commitments.len() == 8);
 

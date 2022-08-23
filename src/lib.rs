@@ -53,7 +53,7 @@
 //! of scope, they each need to agree upon their *participant index* which is
 //! some non-zero integer unique to each of them (these are the `1`, `2`, and
 //! `3` in the following examples).
-//! 
+//!
 //! ```rust
 //! # use ice_frost::Parameters;
 //! # use ice_frost::Participant;
@@ -63,7 +63,7 @@
 //! #
 //! # let params = Parameters { t: 2, n: 3 };
 //! # let mut rng = OsRng;
-//! 
+//!
 //! // Each application developer should choose a context string as unique to their usage
 //! // as possible (instead of the below "Φ"), in order to prevent replay attacks, as well as
 //! // a good cryptographic source of randomness.
@@ -489,11 +489,11 @@
 //! # fn do_test() -> Result<(), ()> {
 //! let params = Parameters { t: 2, n: 3 };
 //! # let mut rng = OsRng;
-//! 
+//!
 //! let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
 //! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
 //! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
-//! 
+//!
 //! // Perform regular 2-out-of-3 DKG...
 //! #
 //! # let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
@@ -521,7 +521,7 @@
 //! # let alice_state = alice_state.to_round_two(alice_my_encrypted_secret_shares, &mut rng).or(Err(()))?;
 //! # let bob_state = bob_state.to_round_two(bob_my_encrypted_secret_shares, &mut rng).or(Err(()))?;
 //! # let carol_state = carol_state.to_round_two(carol_my_encrypted_secret_shares, &mut rng).or(Err(()))?;
-//! 
+//!
 //! let (alice_group_key, alice_secret_key) = alice_state.finish().or(Err(()))?;
 //! let (bob_group_key, bob_secret_key) = bob_state.finish().or(Err(()))?;
 //! let (carol_group_key, carol_secret_key) = carol_state.finish().or(Err(()))?;
@@ -531,20 +531,20 @@
 //! #
 //! // Instantiate new configuration parameters and create a set of signers
 //! let new_params = Parameters { t: 3, n: 4 };
-//! 
+//!
 //! let (alexis, alexis_dh_sk) = Participant::new_signer(&new_params, 1, "Φ", &mut rng);
 //! let (barbara, barbara_dh_sk) = Participant::new_signer(&new_params, 2, "Φ", &mut rng);
 //! let (claire, claire_dh_sk) = Participant::new_signer(&new_params, 3, "Φ", &mut rng);
 //! let (david, david_dh_sk) = Participant::new_signer(&new_params, 4, "Φ", &mut rng);
-//! 
+//!
 //! let signers: Vec<Participant> =
 //!     vec!(alexis.clone(), barbara.clone(), claire.clone(), david.clone());
 //! let (alice_as_dealer, alice_encrypted_shares, participant_lists) =
 //!     Participant::reshare(&new_params, alice_secret_key, &signers, "Φ", &mut rng).or(Err(()))?;
-//! 
+//!
 //! let (bob_as_dealer, bob_encrypted_shares, participant_lists) =
 //!     Participant::reshare(&new_params, bob_secret_key, &signers, "Φ", &mut rng).or(Err(()))?;
-//! 
+//!
 //! let (carol_as_dealer, carol_encrypted_shares, participant_lists) =
 //!     Participant::reshare(&new_params, carol_secret_key, &signers, "Φ", &mut rng).or(Err(()))?;
 //! # Ok(()) } fn main() { assert!(do_test().is_ok()); }
@@ -631,7 +631,7 @@
 //!         &mut rng,
 //!     )
 //!     .or(Err(()))?;
-//! 
+//!
 //! let (barbara_state, participant_lists) =
 //!     DistributedKeyGeneration::<_>::new(
 //!         &params,
@@ -642,7 +642,7 @@
 //!         &mut rng,
 //!     )
 //!     .or(Err(()))?;
-//! 
+//!
 //! let (claire_state, participant_lists) =
 //!     DistributedKeyGeneration::<_>::new(
 //!         &params,
@@ -653,7 +653,7 @@
 //!         &mut rng,
 //!     )
 //!     .or(Err(()))?;
-//! 
+//!
 //! let (david_state, participant_lists) =
 //!     DistributedKeyGeneration::<_>::new(
 //!         &params,
@@ -876,7 +876,7 @@
 //! let (barbara_group_key, barbara_secret_key) = barbara_state.finish().or(Err(()))?;
 //! let (claire_group_key, claire_secret_key) = claire_state.finish().or(Err(()))?;
 //! let (david_group_key, david_secret_key) = david_state.finish().or(Err(()))?;
-//! 
+//!
 //! assert!(alexis_group_key == alice_group_key);
 //! assert!(barbara_group_key == alice_group_key);
 //! assert!(claire_group_key == alice_group_key);
@@ -1190,9 +1190,9 @@ extern crate std;
 extern crate alloc;
 
 pub mod keygen;
+pub mod nizk;
 pub mod parameters;
 pub mod precomputation;
-pub mod nizk;
 pub mod signature;
 
 pub use keygen::Error;

@@ -11,8 +11,8 @@
 
 //! Configurable parameters for an instance of a FROST signing protocol.
 
-use core::convert::TryInto;
 use crate::keygen::Error;
+use core::convert::TryInto;
 
 /// The configuration parameters for conducting the process of creating a
 /// threshold signature.
@@ -61,11 +61,13 @@ mod test {
         let mut rng = OsRng;
 
         for _ in 0..100 {
-            let params = Parameters { n: rng.next_u32(), t: rng.next_u32() };
+            let params = Parameters {
+                n: rng.next_u32(),
+                t: rng.next_u32(),
+            };
             let bytes = params.to_bytes();
             assert!(Parameters::from_bytes(&bytes).is_ok());
             assert_eq!(params, Parameters::from_bytes(&bytes).unwrap());
-
         }
     }
 }

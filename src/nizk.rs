@@ -53,8 +53,7 @@ impl NizkOfSecretKey {
         public_key: &RistrettoPoint,
         context_string: &str,
         mut csprng: impl Rng + CryptoRng,
-    ) -> Self
-    {
+    ) -> Self {
         let k: Scalar = Scalar::random(&mut csprng);
         let M: RistrettoPoint = &k * &RISTRETTO_BASEPOINT_TABLE;
 
@@ -72,8 +71,14 @@ impl NizkOfSecretKey {
     }
 
     /// Verify that the prover does indeed know the secret key.
-    pub fn verify(&self, index: &u32, public_key: &RistrettoPoint, context_string: &str) -> Result<(), Error> {
-        let M_prime: RistrettoPoint = (&RISTRETTO_BASEPOINT_TABLE * &self.r) + (public_key * -&self.s);
+    pub fn verify(
+        &self,
+        index: &u32,
+        public_key: &RistrettoPoint,
+        context_string: &str,
+    ) -> Result<(), Error> {
+        let M_prime: RistrettoPoint =
+            (&RISTRETTO_BASEPOINT_TABLE * &self.r) + (public_key * -&self.s);
 
         let mut hram = Sha512::new();
 
@@ -105,14 +110,16 @@ impl NizkOfSecretKey {
         let s = Scalar::from_canonical_bytes(
             bytes[0..32]
                 .try_into()
-                .map_err(|_| Error::SerialisationError)?
-        ).ok_or(Error::SerialisationError)?;
+                .map_err(|_| Error::SerialisationError)?,
+        )
+        .ok_or(Error::SerialisationError)?;
 
         let r = Scalar::from_canonical_bytes(
             bytes[32..64]
                 .try_into()
-                .map_err(|_| Error::SerialisationError)?
-        ).ok_or(Error::SerialisationError)?;
+                .map_err(|_| Error::SerialisationError)?,
+        )
+        .ok_or(Error::SerialisationError)?;
 
         Ok(NizkOfSecretKey { s, r })
     }
