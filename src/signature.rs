@@ -45,7 +45,7 @@ use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 
 use sha2::Digest;
-use sha2::Sha512;
+use sha2::{Sha256, Sha512};
 
 use crate::keygen::Error;
 use crate::keygen::GroupKey;
@@ -262,21 +262,21 @@ pub(crate) struct IndividualPublicKeys(pub(crate) BTreeMap<[u8; 4], RistrettoPoi
 
 impl_indexed_hashmap!(Type = IndividualPublicKeys, Item = RistrettoPoint);
 
-/// Compute a Sha-512 hash of a `context_string` and a `message`.
-pub fn compute_message_hash(context_string: &[u8], message: &[u8]) -> [u8; 64] {
-    let mut h = Sha512::new();
+/// Compute a Sha-256 hash of a `context_string` and a `message`.
+pub fn compute_message_hash(context_string: &[u8], message: &[u8]) -> [u8; 32] {
+    let mut h = Sha256::new();
 
     h.update(context_string);
     h.update(message);
 
-    let mut output = [0u8; 64];
+    let mut output = [0u8; 32];
 
     output.copy_from_slice(h.finalize().as_slice());
     output
 }
 
 fn compute_binding_factors_and_group_commitment(
-    message_hash: &[u8; 64],
+    message_hash: &[u8; 32],
     signers: &[Signer],
 ) -> (BTreeMap<u32, Scalar>, SignerRs) {
     let mut binding_factors: BTreeMap<u32, Scalar> = BTreeMap::new();
@@ -328,7 +328,7 @@ fn compute_binding_factors_and_group_commitment(
     (binding_factors, Rs)
 }
 
-fn compute_challenge(message_hash: &[u8; 64], group_key: &GroupKey, R: &RistrettoPoint) -> Scalar {
+fn compute_challenge(message_hash: &[u8; 32], group_key: &GroupKey, R: &RistrettoPoint) -> Scalar {
     let mut h2 = Sha512::new();
 
     // XXX [PAPER] Decide if we want a context string for the challenge.  This
@@ -400,7 +400,7 @@ impl SecretKey {
     /// a string describing the error which occurred.
     pub fn sign(
         &self,
-        message_hash: &[u8; 64],
+        message_hash: &[u8; 32],
         group_key: &GroupKey,
         // XXX TODO [PAPER] Can we guarantee simultaneous runs of the protocol
         // with these nonces being potentially reused?
@@ -510,7 +510,7 @@ impl Aggregator for Initial<'_> {}
 #[derive(Debug)]
 pub struct Finalized {
     /// The hashed context and message for signing.
-    pub(crate) message_hash: [u8; 64],
+    pub(crate) message_hash: [u8; 32],
 }
 
 impl Aggregator for Finalized {}
@@ -790,7 +790,7 @@ impl ThresholdSignature {
     pub fn verify(
         &self,
         group_key: &GroupKey,
-        message_hash: &[u8; 64],
+        message_hash: &[u8; 32],
     ) -> Result<(), SignatureError> {
         let c_prime = compute_challenge(message_hash, group_key, &self.R);
         let R_prime =
