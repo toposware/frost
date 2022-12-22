@@ -9,7 +9,7 @@
 // - isis agora lovecruft <isis@patternsinthevoid.net>
 // - Toposware developers <dev@toposware.com>
 
-//! A Rust implementation of **[ICE-FROST]**: **I**dentifiable **C**heating **E**ntity **F**lexible **R**ound-**O**ptimised **S**chnorr **T**hreshold signatures.
+//! A Rust implementation of Static **[ICE-FROST]**: **I**dentifiable **C**heating **E**ntity **F**lexible **R**ound-**O**ptimised **S**chnorr **T**hreshold signatures.
 //!
 //! Threshold signatures are a cryptographic construction wherein a subset, \\( t \\),
 //! of a group of \\( n \\) signers can produce a valid signature.  For example, if
@@ -23,8 +23,8 @@
 //! pre-computed secret shares.
 //!
 //! For a more in-depth explanation of the mathematics involved, please see
-//! [here](keygen/index.html), [here](precomputation/index.html), and
-//! [here](signature/index.html).
+//! [the keygen module](keygen/index.html), [the precomputation module](precomputation/index.html),
+//! and [the signature module](signature/index.html).
 //!
 //! [FROST]: https://eprint.iacr.org/2020/852
 //! [ICE-FROST]: https://eprint.iacr.org/2021/1658
@@ -75,16 +75,6 @@
 //! They send these values to each of the other participants (also out of scope
 //! for this library), or otherwise publish them publicly somewhere.
 //!
-//! ```rust
-//! # // This comment is here just to silence the "this code block is empty" warning.
-//! // send_to_bob(alice);
-//! // send_to_carol(alice);
-//! // send_to_alice(bob);
-//! // send_to_carol(bob);
-//! // send_to_alice(carol);
-//! // send_to_bob(carol);
-//! ```
-//!
 //! Note that they should only send the `alice`, `bob`, and `carol` structs, *not*
 //! the `alice_coefficients`, etc., as the latter are their personal secret keys.
 //!
@@ -101,9 +91,9 @@
 //! # let params = Parameters { t: 2, n: 3 };
 //! # let mut rng = OsRng;
 //! #
-//! let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
-//! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
-//! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
+//! # let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
+//! # let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
+//! # let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
 //! #
 //! alice.proof_of_secret_key.as_ref().unwrap()
 //!     .verify(&alice.index, &alice.public_key().unwrap(), "Φ").or(Err(()))?;
@@ -123,9 +113,9 @@
 //! # let params = Parameters { t: 2, n: 3 };
 //! # let mut rng = OsRng;
 //! #
-//! let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
-//! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
-//! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
+//! # let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
+//! # let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
+//! # let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
 //! #
 //! bob.proof_of_secret_key.as_ref().unwrap()
 //!     .verify(&bob.index, &bob.public_key().unwrap(), "Φ").or(Err(()))?;
@@ -145,9 +135,9 @@
 //! # let params = Parameters { t: 2, n: 3 };
 //! # let mut rng = OsRng;
 //! #
-//! let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
-//! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
-//! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
+//! # let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
+//! # let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
+//! # let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
 //! #
 //! carol.proof_of_secret_key.as_ref().unwrap()
 //!     .verify(&carol.index, &carol.public_key().unwrap(), "Φ").or(Err(()))?;
@@ -170,9 +160,9 @@
 //! # let params = Parameters { t: 2, n: 3 };
 //! # let mut rng = OsRng;
 //! #
-//! let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
-//! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
-//! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
+//! # let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
+//! # let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
+//! # let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
 //!
 //! let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
 //! let (alice_state, participant_lists) =
@@ -203,17 +193,14 @@
 //! # let params = Parameters { t: 2, n: 3 };
 //! # let mut rng = OsRng;
 //! #
-//! let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
-//! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
-//! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
+//! # let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
+//! # let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
+//! # let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
 //! #
 //! # let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
 //! # let (alice_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
 //! #                                                      &participants, "Φ", &mut rng).or(Err(()))?;
 //! let alice_their_encrypted_secret_shares = alice_state.their_encrypted_secret_shares().or(Err(()))?;;
-//!
-//! // send_to_bob(alice_their_encrypted_secret_shares[0]);
-//! // send_to_carol(alice_their_encrypted_secret_shares[1]);
 //! # Ok(()) } fn main() { assert!(do_test().is_ok()); }
 //! ```
 //!
@@ -233,11 +220,11 @@
 //! # let params = Parameters { t: 2, n: 3 };
 //! # let mut rng = OsRng;
 //! #
-//! let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
-//! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
-//! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
+//! # let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
+//! # let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
+//! # let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
 //! #
-//! let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
+//! # let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
 //! let (bob_state, participant_lists) =
 //!     DistributedKeyGeneration::<_>::new_initial(
 //!         &params,
@@ -253,9 +240,9 @@
 //! # let params = Parameters { t: 2, n: 3 };
 //! # let mut rng = OsRng;
 //! #
-//! let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
-//! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
-//! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
+//! # let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
+//! # let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
+//! # let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
 //! #
 //! # let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
 //! # let (bob_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &bob_dh_sk, &bob.index, &bob_coefficients,
@@ -284,11 +271,11 @@
 //! # let params = Parameters { t: 2, n: 3 };
 //! # let mut rng = OsRng;
 //! #
-//! let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
-//! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
-//! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
+//! # let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
+//! # let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
+//! # let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
 //! #
-//! let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
+//! # let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
 //! let (carol_state, participant_lists) =
 //!     DistributedKeyGeneration::<_>::new_initial(
 //!         &params,
@@ -304,9 +291,9 @@
 //! # let params = Parameters { t: 2, n: 3 };
 //! # let mut rng = OsRng;
 //! #
-//! let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
-//! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
-//! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
+//! # let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
+//! # let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
+//! # let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
 //! #
 //! # let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
 //! # let (carol_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &carol_dh_sk, &carol.index, &carol_coefficients,
@@ -334,9 +321,9 @@
 //! # let params = Parameters { t: 2, n: 3 };
 //! # let mut rng = OsRng;
 //! #
-//! let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
-//! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
-//! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
+//! # let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
+//! # let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
+//! # let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
 //! #
 //! # let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
 //! # let (alice_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
@@ -378,9 +365,9 @@
 //! # let params = Parameters { t: 2, n: 3 };
 //! # let mut rng = OsRng;
 //! #
-//! let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
-//! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
-//! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
+//! # let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
+//! # let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
+//! # let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
 //! #
 //! # let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
 //! # let (alice_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
@@ -427,9 +414,9 @@
 //! # let params = Parameters { t: 2, n: 3 };
 //! # let mut rng = OsRng;
 //! #
-//! let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
-//! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
-//! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
+//! # let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
+//! # let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
+//! # let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
 //! #
 //! # let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
 //! # let (alice_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
@@ -489,10 +476,9 @@
 //! # fn do_test() -> Result<(), ()> {
 //! let params = Parameters { t: 2, n: 3 };
 //! # let mut rng = OsRng;
-//!
-//! let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
-//! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
-//! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
+//! # let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
+//! # let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
+//! # let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
 //!
 //! // Perform regular 2-out-of-3 DKG...
 //! #
@@ -529,7 +515,7 @@
 //! # assert!(alice_group_key == bob_group_key);
 //! # assert!(carol_group_key == bob_group_key);
 //! #
-//! // Instantiate new configuration parameters and create a set of signers
+//! // Instantiate new configuration parameters and create a new set of signers
 //! let new_params = Parameters { t: 3, n: 4 };
 //!
 //! let (alexis, alexis_dh_sk) = Participant::new_signer(&new_params, 1, "Φ", &mut rng);
@@ -539,6 +525,7 @@
 //!
 //! let signers: Vec<Participant> =
 //!     vec!(alexis.clone(), barbara.clone(), claire.clone(), david.clone());
+//!
 //! let (alice_as_dealer, alice_encrypted_shares, participant_lists) =
 //!     Participant::reshare(&new_params, alice_secret_key, &signers, "Φ", &mut rng).or(Err(()))?;
 //!
@@ -621,6 +608,7 @@
 //! #
 //! let dealers: Vec<Participant> =
 //!     vec!(alice_as_dealer.clone(), bob_as_dealer.clone(), carol_as_dealer.clone());
+//!
 //! let (alexis_state, participant_lists) =
 //!     DistributedKeyGeneration::<_>::new(
 //!         &params,
@@ -886,6 +874,7 @@
 //!
 //! ## Precomputation and Partial Signatures
 //!
+//! After running their DKG, or after receiving secret shares from a previous set of signers,
 //! Alice, Bob, and Carol can now create partial threshold signatures over an agreed upon
 //! message with their respective secret keys, which they can then give to an untrusted
 //! [`SignatureAggregator`] (which can be one of the participants) to create a
@@ -908,9 +897,9 @@
 //! # let params = Parameters { t: 2, n: 3 };
 //! # let mut rng = OsRng;
 //! #
-//! let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
-//! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
-//! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
+//! # let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
+//! # let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
+//! # let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
 //! #
 //! # let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
 //! # let (alice_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
@@ -963,6 +952,7 @@
 //! // some additional context, such as public information about the run of the protocol.
 //! let message_hash = compute_message_hash(&context[..], &message[..]);
 //!
+//! // The aggregator can be anyone who knows the group key, not necessarily Bob or a group participant
 //! let mut aggregator =
 //!     SignatureAggregator::new(
 //!         params,
@@ -995,9 +985,9 @@
 //! # let params = Parameters { t: 2, n: 3 };
 //! # let mut rng = OsRng;
 //! #
-//! let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
-//! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
-//! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
+//! # let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
+//! # let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
+//! # let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
 //! #
 //! # let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
 //! # let (alice_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
@@ -1052,8 +1042,78 @@
 //!
 //! The aggregator should then publicly announce which participants are expected to be signers.
 //!
-//! ```rust,ignore
+//! ```rust
+//! # use ice_frost::compute_message_hash;
+//! # use ice_frost::generate_commitment_share_lists;
+//! # use ice_frost::DistributedKeyGeneration;
+//! # use ice_frost::IndividualPublicKey;
+//! # use ice_frost::Parameters;
+//! # use ice_frost::Participant;
+//! # use curve25519_dalek::ristretto::RistrettoPoint;
+//! # use curve25519_dalek::traits::Identity;
+//! # use curve25519_dalek::scalar::Scalar;
+//! # use ice_frost::SignatureAggregator;
+//! #
+//! # use rand::rngs::OsRng;
+//! #
+//! # fn do_test() -> Result<(), ()> {
+//! # let params = Parameters { t: 2, n: 3 };
+//! # let mut rng = OsRng;
+//! #
+//! # let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
+//! # let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
+//! # let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
+//! #
+//! # let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
+//! # let (alice_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
+//! #                                                      &participants, "Φ", &mut rng).or(Err(()))?;
+//! # let alice_their_encrypted_secret_shares = alice_state.their_encrypted_secret_shares().or(Err(()))?;;
+//! #
+//! # let (bob_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &bob_dh_sk, &bob.index, &bob_coefficients,
+//! #                                                    &participants, "Φ", &mut rng).or(Err(()))?;
+//! # let bob_their_encrypted_secret_shares = bob_state.their_encrypted_secret_shares().or(Err(()))?;;
+//! #
+//! # let (carol_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &carol_dh_sk, &carol.index, &carol_coefficients,
+//! #                                                      &participants, "Φ", &mut rng).or(Err(()))?;
+//! # let carol_their_encrypted_secret_shares = carol_state.their_encrypted_secret_shares().or(Err(()))?;;
+//! # let alice_my_encrypted_secret_shares = vec!(alice_their_encrypted_secret_shares[0].clone(),
+//! #                                   bob_their_encrypted_secret_shares[0].clone(),
+//! #                                   carol_their_encrypted_secret_shares[0].clone());
+//! # let bob_my_encrypted_secret_shares = vec!(alice_their_encrypted_secret_shares[1].clone(),
+//! #                                 bob_their_encrypted_secret_shares[1].clone(),
+//! #                                 carol_their_encrypted_secret_shares[1].clone());
+//! # let carol_my_encrypted_secret_shares = vec!(alice_their_encrypted_secret_shares[2].clone(),
+//! #                                   bob_their_encrypted_secret_shares[2].clone(),
+//! #                                   carol_their_encrypted_secret_shares[2].clone());
+//! #
+//! # let alice_state = alice_state.to_round_two(alice_my_encrypted_secret_shares, &mut rng).or(Err(()))?;
+//! # let bob_state = bob_state.to_round_two(bob_my_encrypted_secret_shares, &mut rng).or(Err(()))?;
+//! # let carol_state = carol_state.to_round_two(carol_my_encrypted_secret_shares, &mut rng).or(Err(()))?;
+//! #
+//! # let (alice_group_key, alice_secret_key) = alice_state.finish().or(Err(()))?;
+//! # let (bob_group_key, bob_secret_key) = bob_state.finish().or(Err(()))?;
+//! # let (carol_group_key, carol_secret_key) = carol_state.finish().or(Err(()))?;
+//! #
+//! # let alice_public_key = alice_secret_key.to_public();
+//! # let bob_public_key = bob_secret_key.to_public();
+//! # let carol_public_key = carol_secret_key.to_public();
+//! #
+//! # let (alice_public_comshares, mut alice_secret_comshares) = generate_commitment_share_lists(&mut OsRng, 1, 1);
+//! # let (bob_public_comshares, mut bob_secret_comshares) = generate_commitment_share_lists(&mut OsRng, 2, 1);
+//! # let (carol_public_comshares, mut carol_secret_comshares) = generate_commitment_share_lists(&mut OsRng, 3, 1);
+//! #
+//! # let context = b"CONTEXT STRING STOLEN FROM DALEK TEST SUITE";
+//! # let message = b"This is a test of the tsunami alert system. This is only a test.";
+//! #
+//! # let message_hash = compute_message_hash(&context[..], &message[..]);
+//! #
+//! # let mut aggregator = SignatureAggregator::new(params, bob_group_key.clone(), &context[..], &message[..]);
+//! #
+//! # aggregator.include_signer(1, alice_public_comshares.commitments[0], alice_public_key);
+//! # aggregator.include_signer(3, carol_public_comshares.commitments[0], carol_public_key);
 //! let signers = aggregator.get_signers();
+//! # Ok(()) }
+//! # fn main() { assert!(do_test().is_ok()); }
 //! ```
 //!
 //! Alice and Carol each then compute their partial signatures, and send these to the signature aggregator.
@@ -1075,9 +1135,9 @@
 //! # let params = Parameters { t: 2, n: 3 };
 //! # let mut rng = OsRng;
 //! #
-//! let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
-//! let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
-//! let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
+//! # let (alice, alice_coefficients, alice_dh_sk) = Participant::new_dealer(&params, 1, "Φ", &mut rng);
+//! # let (bob, bob_coefficients, bob_dh_sk) = Participant::new_dealer(&params, 2, "Φ", &mut rng);
+//! # let (carol, carol_coefficients, carol_dh_sk) = Participant::new_dealer(&params, 3, "Φ", &mut rng);
 //! #
 //! # let participants: Vec<Participant> = vec!(alice.clone(), bob.clone(), carol.clone());
 //! # let (alice_state, participant_lists) = DistributedKeyGeneration::<_>::new_initial(&params, &alice_dh_sk, &alice.index, &alice_coefficients,
