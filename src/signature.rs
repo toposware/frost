@@ -723,58 +723,68 @@ impl SignatureAggregator<Finalized> {
             .collect();
         let mut z = Scalar::zero();
 
+        // We first combine all partial signatures together, to remove the need for individual
+        // signature verification in case the final group signature is valid.
         for signer in self.state.signers.iter() {
-            // [DIFFERENT_TO_PAPER] We're not just pulling lambda out of our
-            // ass, instead to get the correct algebraic properties to allow for
-            // partial signature aggregation with t <= #participant <= n, we
-            // have to do Langrangian polynomial interpolation.
-            //
-            // This unwrap() cannot fail, since the attempted division by zero in
-            // the calculation of the Lagrange interpolation cannot happen,
-            // because we use the typestate pattern,
-            // i.e. SignatureAggregator<Initial>.finalize(), to ensure that
-            // there are no duplicate signers, which is the only thing that
-            // would cause a denominator of zero.
-            let lambda = calculate_lagrange_coefficients(
-                &signer.participant_index,
-                &all_participant_indices,
-            )
-            .unwrap();
-
-            // Similar to above, this unwrap() cannot fail, because
-            // SignatureAggregator<Initial>.finalize() checks that we have
-            // partial signature for every expected signer.
+            // This unwrap() cannot fail, because SignatureAggregator<Initial>.finalize()
+            // checks that we have partial signature for every expected signer.
             let partial_sig = self
                 .state
                 .partial_signatures
                 .get(&signer.participant_index)
                 .unwrap();
 
-            // Again, this unwrap() cannot fail, because of the checks in finalize().
-            let Y_i = self
-                .state
-                .public_keys
-                .get(&signer.participant_index)
-                .unwrap();
-
-            let check = &RISTRETTO_BASEPOINT_TABLE * partial_sig;
-
-            // Again, this unwrap() cannot fail, because we check the
-            // participant indexes against the expected ones in finalize().
-            let R_i = Rs.get(&signer.participant_index).unwrap();
-
-            if check == R_i + (Y_i * (c * lambda)) {
-                z += partial_sig;
-            } else {
-                // XXX We don't really need the error string anymore, since there's only one failure mode.
-                misbehaving_participants
-                    .insert(signer.participant_index, "Incorrect partial signature");
-            }
+            z += partial_sig;
         }
 
-        match !misbehaving_participants.is_empty() {
-            true => Err(misbehaving_participants),
-            false => Ok(ThresholdSignature { z, R }),
+        let signature = ThresholdSignature { z, R };
+
+        // Verify the obtained signature, listing malicious participants
+        // if the verification failed.
+        match signature.verify(&self.state.group_key, &self.aggregator.message_hash) {
+            Ok(()) => Ok(signature),
+            Err(_) => {
+                for signer in self.state.signers.iter() {
+                    // This unwrap() cannot fail, since the attempted division by zero in
+                    // the calculation of the Lagrange interpolation cannot happen,
+                    // because we use the typestate pattern,
+                    // i.e. SignatureAggregator<Initial>.finalize(), to ensure that
+                    // there are no duplicate signers, which is the only thing that
+                    // would cause a denominator of zero.
+                    let lambda = calculate_lagrange_coefficients(
+                        &signer.participant_index,
+                        &all_participant_indices,
+                    )
+                    .unwrap();
+
+                    // This cannot fail, and has already been performed previously.
+                    let partial_sig = self
+                        .state
+                        .partial_signatures
+                        .get(&signer.participant_index)
+                        .unwrap();
+
+                    // Again, this unwrap() cannot fail, because of the checks in finalize().
+                    let Y_i = self
+                        .state
+                        .public_keys
+                        .get(&signer.participant_index)
+                        .unwrap();
+
+                    let check = &RISTRETTO_BASEPOINT_TABLE * partial_sig;
+
+                    // Again, this unwrap() cannot fail, because we check the
+                    // participant indexes against the expected ones in finalize().
+                    let R_i = Rs.get(&signer.participant_index).unwrap();
+
+                    if check != R_i + (Y_i * (c * lambda)) {
+                        // XXX We don't really need the error string anymore, since there's only one failure mode.
+                        misbehaving_participants
+                            .insert(signer.participant_index, "Incorrect partial signature");
+                    }
+                }
+                Err(misbehaving_participants)
+            }
         }
     }
 }
