@@ -16,7 +16,7 @@ This crate can be made `no_std` compliant, by relying on the `alloc` crate inste
 
 ## WARNING
 
-This codedebase is under development and is at an academic proof-of-concept prototype level.
+This codebase is under development and is at an academic proof-of-concept prototype level.
 In particular, this implementation has not received careful code review yet, and hence is NOT ready for production use.
 
 ## License
