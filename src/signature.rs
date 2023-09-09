@@ -56,7 +56,7 @@ use crate::precomputation::SecretCommitmentShareList;
 pub use crate::keygen::SecretKey;
 
 /// Errors that may happen during Signing
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum SignatureError {
     /// The participant is missing commitment shares
     MissingCommitmentShares,
@@ -453,6 +453,7 @@ impl SecretKey {
 pub trait Aggregator {}
 
 /// The internal state of a signature aggregator.
+#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) struct AggregatorState {
     /// The protocol instance parameters.

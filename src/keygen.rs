@@ -538,7 +538,7 @@ use aes::cipher::{generic_array::GenericArray, FromBlockCipher, NewBlockCipher, 
 use aes::{Aes256, Aes256Ctr};
 
 /// Errors that may happen during Key Generation
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Error {
     /// Serialisation error
     SerialisationError,
@@ -1182,6 +1182,7 @@ mod private {
 
 /// State machine structures for holding intermediate values during a
 /// distributed key generation protocol run, to prevent misuse.
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct DistributedKeyGeneration<S: DkgState> {
     state: Box<ActualState>,
@@ -2038,7 +2039,7 @@ impl EncryptedSecretShare {
 }
 
 /// A proof that a generated complaint is valid.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ComplaintProof {
     /// a1 = g^r.
     pub a1: RistrettoPoint,
@@ -2080,7 +2081,7 @@ impl ComplaintProof {
 }
 
 /// A complaint generated when a participant receives a bad share.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Complaint {
     /// The index of the complaint maker.
     pub maker_index: u32,
